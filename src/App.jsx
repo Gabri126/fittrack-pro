@@ -14,7 +14,7 @@ export default function App() {
 
   // Library state per ospitare più schede e i loro giorni
   const [library, setLibrary] = useState(() => {
-    const saved = localStorage.getItem('fittrack_ultra_library');
+    const saved = localStorage.getItem('fittrack_ultra_library_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -22,28 +22,25 @@ export default function App() {
         console.error("Error parsing library", e);
       }
     }
-    // Dati di default
+    // Dati di default V2 (7 slots)
     return [
       {
         id: 'plan-1',
         name: 'Ipertrofia Master',
-        status: 'active', // 'active' o 'archived'
-        days: [
-          {
-            id: 'day-1',
-            name: 'Giorno 1',
-            exercises: [
-              { id: 'ex-1', exerciseName: 'Panca Piana', sets: 4, reps: 8, weight: 80 },
-              { id: 'ex-2', exerciseName: 'Spinte Manubri Panca Inclinata', sets: 3, reps: 10, weight: 30 }
-            ]
-          }
-        ]
+        status: 'active',
+        days: Array.from({ length: 7 }, (_, i) => ({
+           id: `day-${i}`,
+           dayOfWeek: i, // 0 = Sun, 1 = Mon, ..., 6 = Sat
+           exercises: i === 1 ? [
+             { id: 'ex-1', exerciseName: 'Panca Piana', sets: 4, reps: 8, weight: 80 }
+           ] : []
+        }))
       }
     ];
   });
 
   const [activeWorkout, setActiveWorkout] = useState(() => {
-    const saved = localStorage.getItem('fittrack_ultra_active');
+    const saved = localStorage.getItem('fittrack_ultra_active_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -55,7 +52,7 @@ export default function App() {
   });
 
   const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('fittrack_ultra_history');
+    const saved = localStorage.getItem('fittrack_ultra_history_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -68,19 +65,19 @@ export default function App() {
 
   // Salva stato al cambiamento
   useEffect(() => {
-    localStorage.setItem('fittrack_ultra_library', JSON.stringify(library));
+    localStorage.setItem('fittrack_ultra_library_v2', JSON.stringify(library));
   }, [library]);
 
   useEffect(() => {
     if (activeWorkout) {
-      localStorage.setItem('fittrack_ultra_active', JSON.stringify(activeWorkout));
+      localStorage.setItem('fittrack_ultra_active_v2', JSON.stringify(activeWorkout));
     } else {
-      localStorage.removeItem('fittrack_ultra_active');
+      localStorage.removeItem('fittrack_ultra_active_v2');
     }
   }, [activeWorkout]);
 
   useEffect(() => {
-    localStorage.setItem('fittrack_ultra_history', JSON.stringify(history));
+    localStorage.setItem('fittrack_ultra_history_v2', JSON.stringify(history));
   }, [history]);
 
   // Global Timer Logic
@@ -146,7 +143,12 @@ export default function App() {
       <AnimatePresence mode="wait">
         {currentTab === 'editor' && (
           <motion.div key="editor" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="h-full">
-            <EditorView library={library} setLibrary={setLibrary} />
+            <EditorView 
+              library={library} 
+              setLibrary={setLibrary} 
+              history={history}
+              setCurrentTab={setCurrentTab}
+            />
           </motion.div>
         )}
         {currentTab === 'active' && (

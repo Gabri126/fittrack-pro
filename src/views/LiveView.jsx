@@ -38,18 +38,12 @@ const WheelPicker = ({ items, value, onChange, formatLabel = (v) => v }) => {
 export default function LiveView({ library, activeWorkout, setActiveWorkout, setHistory, history, startTimer, resetTimer, setCurrentTab, setIsTabBarHidden }) {
   const activePlan = library.find(p => p.status === 'active');
 
-  const initialDayIndex = useMemo(() => {
-    if (!activePlan || activePlan.days.length === 0) return 0;
-    if (history.length > 0) {
-      const lastSessionDayId = history[0].dayId;
-      const lastIndex = activePlan.days.findIndex(d => d.id === lastSessionDayId);
-      if (lastIndex !== -1) return (lastIndex + 1) % activePlan.days.length;
-    }
-    return 0;
-  }, [activePlan, history]);
-
-  const [selectedDayIndex, setSelectedDayIndex] = useState(initialDayIndex);
-  useEffect(() => { setSelectedDayIndex(initialDayIndex); }, [initialDayIndex]);
+  const todayDayOfWeek = new Date().getDay();
+  const [selectedDayIndex, setSelectedDayIndex] = useState(todayDayOfWeek);
+  
+  useEffect(() => {
+    setSelectedDayIndex(todayDayOfWeek);
+  }, [todayDayOfWeek]);
 
   const [elapsed, setElapsed] = useState(() => {
     if (activeWorkout) return Math.floor((Date.now() - activeWorkout.startTime) / 1000);
@@ -113,7 +107,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
 
   const startWorkout = () => {
     if (!activePlan || activePlan.days.length === 0) return;
-    const currentDay = activePlan.days[selectedDayIndex];
+    const currentDay = activePlan.days.find(d => d.dayOfWeek === selectedDayIndex);
     if (!currentDay || currentDay.exercises.length === 0) return;
     
     const exercises = currentDay.exercises.map(ex => {
@@ -129,7 +123,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
     setActiveWorkout({
       id: `session-${Date.now()}`,
       dayId: currentDay.id,
-      dayName: currentDay.name,
+      dayName: DAY_NAMES[currentDay.dayOfWeek],
       planName: activePlan.name,
       startTime: Date.now(),
       exercises
@@ -336,11 +330,16 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
     );
   }
 
+  const DAY_NAMES = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+
   if (!activeWorkout) {
+    const selectedDayData = activePlan.days.find(d => d.dayOfWeek === selectedDayIndex);
+    const hasExercises = selectedDayData && selectedDayData.exercises.length > 0;
+
     return (
       <div className="p-4 flex flex-col items-center justify-center min-h-[100dvh] pb-32 space-y-8">
-        <div className="w-24 h-24 bg-accentBlue/10 rounded-full flex items-center justify-center border border-accentBlue/20 shadow-[0_0_30px_rgba(10,132,255,0.2)]">
-          <PlayCircle size={48} className="text-accentBlue ml-2" />
+        <div className="w-24 h-24 bg-accentOrange/10 rounded-full flex items-center justify-center border border-accentOrange/20 shadow-[0_0_30px_rgba(255,159,10,0.2)]">
+          <PlayCircle size={48} className="text-accentOrange ml-2" />
         </div>
         <div className="text-center">
           <h2 className="text-3xl font-bold mb-2">Pronto ad allenarti?</h2>
@@ -348,11 +347,15 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
         </div>
         
         <div className="flex space-x-2 overflow-x-auto max-w-full pb-2 hide-scrollbar w-full justify-start md:justify-center px-4">
-          {activePlan.days.map((day, idx) => {
+          {activePlan.days.map((day) => {
              const hasData = day.exercises && day.exercises.length > 0;
              return (
-               <button key={day.id} onClick={() => setSelectedDayIndex(idx)} className={cn("px-5 py-3 rounded-full text-sm font-semibold transition-all border shrink-0", selectedDayIndex === idx ? "bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]" : "bg-surface border-border/50 text-muted hover:text-white", !hasData && "opacity-50")}>
-                 {day.name}
+               <button 
+                 key={day.id} 
+                 onClick={() => setSelectedDayIndex(day.dayOfWeek)} 
+                 className={cn("px-5 py-3 rounded-full text-sm font-semibold transition-all border shrink-0", selectedDayIndex === day.dayOfWeek ? "bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]" : "bg-surface border-border/50 text-muted hover:text-white", !hasData && "opacity-50")}
+               >
+                 {DAY_NAMES[day.dayOfWeek]}
                </button>
              )
           })}
@@ -360,10 +363,10 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
 
         <button 
           onClick={startWorkout}
-          disabled={!activePlan.days[selectedDayIndex] || activePlan.days[selectedDayIndex].exercises.length === 0}
-          className="w-full max-w-sm bg-gradient-to-r from-accentBlue to-blue-500 text-white font-bold text-lg rounded-3xl py-4 shadow-[0_0_20px_rgba(10,132,255,0.4)] disabled:opacity-50 disabled:shadow-none hover:opacity-90 transition-opacity active:scale-[0.98]"
+          disabled={!hasExercises}
+          className="w-full max-w-sm bg-gradient-to-r from-accentOrange to-orange-500 text-white font-bold text-lg rounded-3xl py-4 shadow-[0_0_20px_rgba(255,159,10,0.4)] disabled:opacity-50 disabled:shadow-none hover:opacity-90 transition-opacity active:scale-[0.98]"
         >
-          Inizia Allenamento
+          {hasExercises ? "Inizia Allenamento" : "Nessun esercizio previsto"}
         </button>
       </div>
     );
