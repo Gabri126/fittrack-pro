@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus, GripVertical, Settings2, Timer, NotebookPen, ChevronDown, ChevronUp, ListOrdered } from 'lucide-react';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { cn } from '../App';
 
 const initialForm = { exerciseName: '', sets: '', reps: '', weight: '' };
@@ -64,11 +64,97 @@ const WIZARD_SPLITS = {
   ]
 };
 
+const SETS_OPTIONS = Array.from({length: 10}, (_, i) => i + 1); // 1-10
+const REPS_OPTIONS = Array.from({length: 50}, (_, i) => i + 1); // 1-50
+const KG_OPTIONS = Array.from({length: 401}, (_, i) => i * 0.5); // 0-200kg
+const REST_OPTIONS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 300, 360];
+
+const ScrollPicker = ({ isOpen, onClose, title, options, initialValue, onSelect, unit }) => {
+  const scrollRef = useRef(null);
+  const [selectedValue, setSelectedValue] = useState(initialValue);
+  const lastVibratedValue = useRef(initialValue);
+  const itemHeight = 56; // 14 * 4px = 56px
+
+  useEffect(() => {
+    if (isOpen && scrollRef.current) {
+      const parsedInitial = parseFloat(initialValue);
+      const idx = options.findIndex(o => parseFloat(o) === parsedInitial);
+      if (idx !== -1) {
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = idx * itemHeight;
+            setSelectedValue(options[idx]);
+            lastVibratedValue.current = options[idx];
+          }
+        }, 10);
+      } else {
+        setSelectedValue(options[0]);
+      }
+    }
+  }, [isOpen, initialValue, options]);
+
+  const handleScroll = (e) => {
+    if (!scrollRef.current) return;
+    const scrollY = e.target.scrollTop;
+    const idx = Math.round(scrollY / itemHeight);
+    const validIdx = Math.max(0, Math.min(idx, options.length - 1));
+    const newVal = options[validIdx];
+    
+    if (String(newVal) !== String(lastVibratedValue.current)) {
+      if (navigator.vibrate) navigator.vibrate(5);
+      lastVibratedValue.current = newVal;
+      setSelectedValue(newVal);
+    }
+  };
+
+  const handleConfirm = () => {
+    onSelect(selectedValue);
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="relative w-full max-w-md bg-surface/95 backdrop-blur-xl rounded-t-[32px] border-t border-border/50 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10 flex flex-col overflow-hidden pb-safe">
+            <div className="flex justify-between items-center p-6 border-b border-white/10 shrink-0">
+               <h3 className="font-bold text-xl">{title}</h3>
+               <button onClick={handleConfirm} className="text-white font-bold bg-accentOrange px-6 py-2 rounded-full hover:bg-orange-500 active:scale-95 transition-all shadow-[0_0_15px_rgba(255,159,10,0.4)]">Fatto</button>
+            </div>
+            
+            <div className="relative h-[300px] w-full flex items-center justify-center bg-black/50">
+               <div className="absolute top-0 w-full h-[122px] bg-gradient-to-b from-surface/95 to-transparent z-10 pointer-events-none" />
+               <div className="absolute bottom-0 w-full h-[122px] bg-gradient-to-t from-surface/95 to-transparent z-10 pointer-events-none" />
+               
+               <div className="absolute top-1/2 -translate-y-1/2 w-full h-14 bg-white/5 border-y border-white/10 z-0 pointer-events-none" />
+               
+               <div 
+                 ref={scrollRef}
+                 onScroll={handleScroll}
+                 className="w-full h-full overflow-y-auto hide-scrollbar snap-y-mandatory px-4 relative z-20"
+               >
+                  <div className="h-[122px] shrink-0" />
+                  {options.map((opt, i) => (
+                    <div key={i} className="h-14 flex items-center justify-center snap-center-item shrink-0 text-3xl font-bold font-mono">
+                      <span className={String(selectedValue) === String(opt) ? "text-white" : "text-muted"}>{opt} <span className="text-sm font-normal text-muted/50 ml-1">{unit}</span></span>
+                    </div>
+                  ))}
+                  <div className="h-[122px] shrink-0" />
+               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 export default function EditorView({ library, setLibrary, history, setCurrentTab }) {
   const [route, setRoute] = useState('dashboard'); // dashboard, plan-details, day-edit, wizard
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [selectedDayId, setSelectedDayId] = useState(null);
-  const [dayMode, setDayMode] = useState('readonly'); // readonly, select, refine
+  const [dayMode, setDayMode] = useState('select'); // select, refine
   const [draftExercises, setDraftExercises] = useState([]);
 
   const [selectedDateTs, setSelectedDateTs] = useState(new Date().setHours(0,0,0,0));
@@ -80,12 +166,6 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   const [dbSearch, setDbSearch] = useState('');
   const [isDbFilterActive, setIsDbFilterActive] = useState(true);
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanMessage, setScanMessage] = useState('');
-  const [previewImage, setPreviewImage] = useState(null);
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
-
   const [wizardStep, setWizardStep] = useState(0);
   const [wizardData, setWizardData] = useState({ name: '', frequency: 3, splitId: null });
   const [globalImportText, setGlobalImportText] = useState('');
@@ -95,10 +175,17 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
 
   const [isBinOverlayOpen, setIsBinOverlayOpen] = useState(false);
 
+  // Focus & Picker States
+  const [pickerConfig, setPickerConfig] = useState({ isOpen: false });
+  const [collapsedCards, setCollapsedCards] = useState({});
+  const [isReorderMode, setIsReorderMode] = useState(false);
+
   // Wiggle Mode States
   const [isWiggleMode, setIsWiggleMode] = useState(false);
+  const [draggedDayIdx, setDraggedDayIdx] = useState(null);
   const pressTimer = useRef(null);
   const circleRefs = useRef(new Map());
+  const hoverTargetRef = useRef(null);
 
   // -- HELPERS --
   const activePlan = library.find(p => p.id === selectedPlanId);
@@ -148,6 +235,20 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   };
 
   const selectedDayData = getDayData(selectedDateTs);
+
+  const calculateVolume = (exercises) => {
+    if (!exercises) return 0;
+    return exercises.reduce((acc, curr) => {
+      if (curr.isExpanded && curr.setDetails) {
+        const setVol = curr.setDetails.reduce((sAcc, s) => {
+          if (s.isWarmup) return sAcc;
+          return sAcc + ((parseFloat(s.reps) || 0) * (parseFloat(s.weight) || 0));
+        }, 0);
+        return acc + setVol;
+      }
+      return acc + ((parseFloat(curr.sets) || 0) * (parseFloat(curr.reps) || 0) * (parseFloat(curr.weight) || 0));
+    }, 0);
+  };
 
   // -- WIZARD ACTIONS --
   const startWizard = () => {
@@ -262,8 +363,9 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     }
     setSelectedDayId(dayData.id);
     if (dayData.exercises.length === 0) setDayMode('select');
-    else setDayMode('readonly');
+    else setDayMode('refine');
     setDraftExercises([]);
+    setIsReorderMode(false);
     setRoute('day-edit');
   };
 
@@ -273,6 +375,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       if (exists) return prev.filter(e => e.exerciseName !== exerciseObj.name);
       return [...prev, { id: `draft-${Date.now()}-${Math.random()}`, exerciseName: exerciseObj.name, sets: 3, reps: 10, weight: 0 }];
     });
+    if (navigator.vibrate) navigator.vibrate(10);
   };
 
   const handleDraftManual = (e) => {
@@ -286,6 +389,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       weight: parseFloat(formData.weight) || 0 
     }]);
     setFormData(initialForm);
+    if (navigator.vibrate) navigator.vibrate(10);
   };
 
   const handleDraftAi = () => {
@@ -314,9 +418,10 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     });
     setDraftExercises(prev => [...prev, ...newDrafts]);
     setAiText('');
+    if (navigator.vibrate) navigator.vibrate(20);
   };
 
-  const confirmRefinement = () => {
+  const confirmSelection = () => {
     setLibrary(prev => prev.map(p => {
       if (p.id !== selectedPlanId) return p;
       const newDays = p.days.map(d => {
@@ -325,20 +430,82 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       });
       return { ...p, days: newDays };
     }));
-    setDayMode('readonly');
+    setDayMode('refine');
     setDraftExercises([]);
   };
 
-  const removeWorkoutFromDay = (workoutId) => {
+  // --- LAB ACTIONS (Refine Phase) ---
+  const updateExercisesList = (newExercisesList) => {
     setLibrary(prev => prev.map(p => {
       if (p.id !== selectedPlanId) return p;
       const newDays = p.days.map(d => {
         if (d.id !== selectedDayId) return d;
-        return { ...d, exercises: d.exercises.filter(w => w.id !== workoutId) };
+        return { ...d, exercises: newExercisesList };
       });
       return { ...p, days: newDays };
     }));
   };
+
+  const updateWorkout = (workoutId, updates) => {
+    const newExList = activeDay.exercises.map(w => w.id === workoutId ? { ...w, ...updates } : w);
+    updateExercisesList(newExList);
+  };
+
+  const removeWorkout = (workoutId) => {
+    updateExercisesList(activeDay.exercises.filter(w => w.id !== workoutId));
+  };
+
+  const expandToAdvanced = (workoutId) => {
+    if (navigator.vibrate) navigator.vibrate(20);
+    const ex = activeDay.exercises.find(w => w.id === workoutId);
+    const numSets = parseInt(ex.sets) || 3;
+    const reps = parseInt(ex.reps) || 10;
+    const weight = parseFloat(ex.weight) || 0;
+    const setDetails = Array.from({length: numSets}, (_, i) => ({
+      id: `set-${Date.now()}-${i}`, reps, weight, isWarmup: false
+    }));
+    updateWorkout(workoutId, { isExpanded: true, setDetails, restTime: '', notes: '' });
+    // Ensure expanded card is not collapsed
+    setCollapsedCards(p => ({...p, [workoutId]: false}));
+  };
+
+  const addDetailedRow = (workoutId) => {
+    const ex = activeDay.exercises.find(w => w.id === workoutId);
+    const lastSet = ex.setDetails[ex.setDetails.length - 1];
+    const newSet = {
+      id: `set-${Date.now()}`,
+      reps: lastSet ? lastSet.reps : 10,
+      weight: lastSet ? lastSet.weight : 0,
+      isWarmup: false
+    };
+    updateWorkout(workoutId, { setDetails: [...ex.setDetails, newSet] });
+    if (navigator.vibrate) navigator.vibrate(10);
+  };
+
+  const removeDetailedRow = (workoutId, setId) => {
+    const ex = activeDay.exercises.find(w => w.id === workoutId);
+    if (ex.setDetails.length <= 1) return;
+    updateWorkout(workoutId, { setDetails: ex.setDetails.filter(s => s.id !== setId) });
+  };
+
+  const updateDetailedRow = (workoutId, setId, field, value) => {
+    const ex = activeDay.exercises.find(w => w.id === workoutId);
+    const newSets = ex.setDetails.map(s => s.id === setId ? { ...s, [field]: value } : s);
+    updateWorkout(workoutId, { setDetails: newSets });
+  };
+
+  const openPicker = (title, options, initialValue, unit, onSelect) => {
+    setPickerConfig({
+      isOpen: true,
+      title,
+      options,
+      initialValue,
+      unit,
+      onSelect
+    });
+  };
+
+  const toggleCollapse = (id) => setCollapsedCards(p => ({...p, [id]: !p[id]}));
 
   const updateDayTags = (dayId, tags) => {
     setLibrary(prev => prev.map(p => {
@@ -387,16 +554,20 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     if (pressTimer.current) clearTimeout(pressTimer.current);
   };
 
-  const handleDragEnd = (sourceIdx, info) => {
+  const handleDragStart = (e, info, idx) => {
+    setDraggedDayIdx(idx);
+    if (navigator.vibrate) navigator.vibrate(20);
+  };
+
+  const handleDrag = (sourceIdx, info) => {
     let dropTargetIdx = null;
-    
-    // Find colliding circle
     for (let [idx, ref] of circleRefs.current.entries()) {
       if (ref && idx !== sourceIdx) {
         const rect = ref.getBoundingClientRect();
+        const padding = 30;
         if (
-          info.point.x >= rect.left && info.point.x <= rect.right &&
-          info.point.y >= rect.top && info.point.y <= rect.bottom
+          info.point.x >= rect.left - padding && info.point.x <= rect.right + padding &&
+          info.point.y >= rect.top - padding && info.point.y <= rect.bottom + padding
         ) {
           dropTargetIdx = idx;
           break;
@@ -404,8 +575,35 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       }
     }
 
+    if (hoverTargetRef.current !== dropTargetIdx) {
+      if (navigator.vibrate && dropTargetIdx !== null) navigator.vibrate(15);
+      
+      if (hoverTargetRef.current !== null) {
+         const prevEl = circleRefs.current.get(hoverTargetRef.current);
+         if (prevEl) prevEl.classList.remove('ring-4', 'ring-accentOrange', 'scale-110', 'shadow-[0_0_30px_rgba(255,159,10,0.8)]', 'animate-pulse');
+      }
+      
+      if (dropTargetIdx !== null) {
+         const newEl = circleRefs.current.get(dropTargetIdx);
+         if (newEl) newEl.classList.add('ring-4', 'ring-accentOrange', 'scale-110', 'shadow-[0_0_30px_rgba(255,159,10,0.8)]', 'animate-pulse', 'transition-all');
+      }
+      
+      hoverTargetRef.current = dropTargetIdx;
+    }
+  };
+
+  const handleDragEnd = (sourceIdx, info) => {
+    setDraggedDayIdx(null);
+    const dropTargetIdx = hoverTargetRef.current;
+    
+    if (hoverTargetRef.current !== null) {
+       const el = circleRefs.current.get(hoverTargetRef.current);
+       if (el) el.classList.remove('ring-4', 'ring-accentOrange', 'scale-110', 'shadow-[0_0_30px_rgba(255,159,10,0.8)]', 'animate-pulse');
+       hoverTargetRef.current = null;
+    }
+
     if (dropTargetIdx !== null) {
-      // Perform Swap
+      if (navigator.vibrate) navigator.vibrate(50);
       setLibrary(prev => prev.map(p => {
         if (p.id !== selectedPlanId) return p;
         const d1 = p.days.find(d => d.dayOfWeek === sourceIdx);
@@ -431,26 +629,6 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       return { ...p, days: newDays };
     }));
   };
-
-  const handleVisionSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setPreviewImage(ev.target.result);
-        setIsScanning(true);
-        setScanMessage('AI Analyzing image...');
-        setTimeout(() => {
-          setIsScanning(false);
-          setPreviewImage(null);
-          setDraftExercises(prev => [...prev, { id: `draft-${Date.now()}`, exerciseName: "Esercizio Scansionato", sets: 3, reps: 12, weight: 40 }]);
-        }, 3000);
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = '';
-  };
-
 
   // -- RENDER WIZARD --
   if (route === 'wizard') {
@@ -776,56 +954,94 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
         <div className="flex-1 flex flex-col items-center justify-center px-4 relative z-0">
            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accentOrange/10 blur-[100px] rounded-full pointer-events-none" />
            
-           <div className="flex flex-col items-center gap-y-10 mt-8">
+           <div className="flex flex-col items-center gap-y-10 mt-8 select-none" style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', touchAction: 'none' }} onContextMenu={(e) => { e.preventDefault(); return false; }}>
               {HONEYCOMB_LAYOUT.map((row, rowIdx) => (
                 <div key={rowIdx} className={cn("flex gap-x-8", row.length === 2 ? "px-8" : "")}>
                   {row.map(dayOfWeekIdx => {
                     const dayData = activePlan.days.find(d => d.dayOfWeek === dayOfWeekIdx);
-                    const hasData = dayData && (dayData.exercises.length > 0 || (dayData.tags && dayData.tags.length > 0));
-                    const tagLabel = dayData?.tags && dayData.tags.length > 0 
-                      ? (dayData.tags.length > 1 ? `${dayData.tags[0]} +${dayData.tags.length - 1}` : dayData.tags[0])
-                      : 'Riposo';
+                    const hasExercises = dayData?.exercises?.length > 0;
+                    const hasTags = dayData?.tags?.length > 0;
+                    const hasData = hasExercises || hasTags;
+                    
+                    let tagLabel = 'Riposo';
+                    if (hasTags) {
+                      tagLabel = dayData.tags.length > 1 ? `${dayData.tags[0]} +${dayData.tags.length - 1}` : dayData.tags[0];
+                    } else if (hasExercises) {
+                      tagLabel = 'Tag da assegnare';
+                    }
+
+                    const totalSets = dayData?.exercises?.reduce((acc, ex) => acc + (parseInt(ex.isExpanded && ex.setDetails ? ex.setDetails.length : ex.sets) || 0), 0) || 0;
 
                     return (
                       <div key={dayOfWeekIdx} className="relative flex flex-col items-center group">
                         
+                        {/* Ghost Placeholder */}
+                        <div className="absolute top-0 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center opacity-20 pointer-events-none rounded-full border border-dashed border-white/20" style={{ borderRadius: '9999px' }}>
+                          <span className="font-black text-xl sm:text-2xl tracking-tighter">{DAY_LABELS[dayOfWeekIdx]}</span>
+                        </div>
+
                         <motion.div
                           ref={el => circleRefs.current.set(dayOfWeekIdx, el)}
                           layoutId={`honeycomb-day-${dayOfWeekIdx}`}
                           variants={wiggleVariants}
                           animate={isWiggleMode ? "animate" : "idle"}
                           onPointerDown={handlePointerDown}
+                          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); return false; }}
                           drag={isWiggleMode}
                           dragSnapToOrigin
-                          whileDrag={{ scale: 1.1, zIndex: 50, opacity: 0.8, boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
+                          onDragStart={(e, info) => handleDragStart(e, info, dayOfWeekIdx)}
+                          onDrag={(e, info) => handleDrag(dayOfWeekIdx, info)}
+                          whileDrag={{ scale: 1.2, zIndex: 9999, opacity: 0.9, boxShadow: '0 30px 60px rgba(0,0,0,0.8)' }}
                           onDragEnd={(e, info) => handleDragEnd(dayOfWeekIdx, info)}
                           onClick={() => enterDayEdit(dayData)}
                           className={cn(
                             "w-20 h-20 sm:w-24 sm:h-24 flex flex-col items-center justify-center cursor-pointer transition-colors duration-300 relative z-10",
                             hasData 
-                              ? "bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20" 
-                              : "bg-surface border border-white/10 text-muted hover:border-white/30"
+                              ? "bg-white/10 backdrop-blur-md text-white hover:bg-white/20" 
+                              : "bg-surface text-muted hover:border-white/30",
+                            isWiggleMode ? "border-dashed border-2 border-white/40" : "border-solid border border-white/20"
                           )}
-                          style={{ borderRadius: '9999px', boxShadow: hasData ? '0 0 20px rgba(255,255,255,0.1)' : 'none' }}
+                          style={{ borderRadius: '9999px', boxShadow: hasData ? '0 0 20px rgba(255,255,255,0.1)' : 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                         >
+                          {/* Floating Balloon during Drag */}
+                          <AnimatePresence>
+                            {draggedDayIdx === dayOfWeekIdx && (
+                              <motion.div 
+                                initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.8 }}
+                                className="absolute -top-16 bg-accentOrange text-white font-bold px-4 py-2 rounded-full shadow-[0_10px_20px_rgba(255,159,10,0.5)] whitespace-nowrap z-[10000] pointer-events-none"
+                              >
+                                {tagLabel}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {/* Refined Sets Counter */}
+                          {totalSets > 0 && draggedDayIdx !== dayOfWeekIdx && (
+                            <div className="absolute -top-2 -right-2 bg-black/80 backdrop-blur-md border border-white/20 px-2 py-0.5 rounded-full z-20 pointer-events-none shadow-lg" style={{ borderRadius: '9999px' }}>
+                              <span className="text-[10px] font-bold text-white/90 whitespace-nowrap">{totalSets} serie</span>
+                            </div>
+                          )}
+
                           <AnimatePresence mode="wait">
                             <motion.div
-                              key={dayData?.tags?.join(',') || 'empty'}
+                              key={draggedDayIdx === dayOfWeekIdx ? 'dragged' : (dayData?.tags?.join(',') || 'empty')}
                               initial={{ opacity: 0, scale: 0.8 }}
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.8 }}
                               transition={{ duration: 0.2 }}
                               className="flex flex-col items-center justify-center w-full h-full pointer-events-none"
                             >
-                              <span className="font-black text-xl sm:text-2xl tracking-tighter">{DAY_LABELS[dayOfWeekIdx]}</span>
-                              <span className="text-[9px] font-bold mt-0.5 uppercase tracking-widest opacity-60">{DAY_NAMES[dayOfWeekIdx].substring(0, 3)}</span>
-                              
-                              {dayData?.exercises.length > 0 && (
-                                <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
-                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-black/30 rounded-full uppercase tracking-widest text-white/90" style={{ borderRadius: '9999px' }}>
-                                    {dayData.exercises.length}
-                                  </span>
-                                </div>
+                              {draggedDayIdx === dayOfWeekIdx ? (
+                                <span className="font-bold text-xs sm:text-sm tracking-widest text-accentOrange uppercase text-center leading-tight">
+                                  Sposta
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="font-black text-xl sm:text-2xl tracking-tighter">{DAY_LABELS[dayOfWeekIdx]}</span>
+                                  <span className="text-[9px] font-bold mt-0.5 uppercase tracking-widest opacity-60">{DAY_NAMES[dayOfWeekIdx].substring(0, 3)}</span>
+                                </>
                               )}
                             </motion.div>
                           </AnimatePresence>
@@ -850,8 +1066,9 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                             transition={{ duration: 0.2 }}
                             onClick={() => { setDayToTag(dayData); setIsTagOverlayOpen(true); }}
                             className={cn(
-                              "absolute -bottom-6 cursor-pointer z-20 px-3 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest flex items-center shadow-lg transition-transform active:scale-95 hover:bg-white/20",
-                              hasData ? "bg-white/15 border border-white/20 text-white backdrop-blur-md" : "bg-transparent text-muted"
+                              "absolute -bottom-6 cursor-pointer z-20 px-3 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest flex items-center shadow-lg transition-transform active:scale-95 hover:bg-white/20 whitespace-nowrap",
+                              hasData ? "border border-white/20 backdrop-blur-md" : "bg-transparent text-muted",
+                              tagLabel === 'Tag da assegnare' ? "text-accentOrange border-accentOrange/50 bg-accentOrange/10" : (hasData ? "text-white bg-white/15" : "")
                             )}
                             style={{ borderRadius: '9999px' }}
                           >
@@ -942,7 +1159,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   }
 
   // --- FULLSCREEN DAY EDIT VIEW (Shared Element) ---
-  const totalDayVolume = activeDay.exercises.reduce((acc, curr) => acc + (curr.sets * curr.reps * curr.weight), 0);
+  const totalDayVolume = calculateVolume(activeDay.exercises);
   const dbSearchLower = dbSearch.toLowerCase().trim();
   const dayTags = activeDay.tags || [];
   const filteredDbExercises = EXERCISE_DB.filter(ex => {
@@ -960,6 +1177,8 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       exit={{ borderRadius: '9999px' }}
       style={{ originX: 0.5, originY: 0.5 }}
     >
+      <ScrollPicker {...pickerConfig} onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} />
+
       <header className="sticky top-0 z-30 pt-6 pb-4 bg-black/90 backdrop-blur-md border-b border-border/50 flex items-center space-x-4 shrink-0">
         <button onClick={handleDayExit} className="w-10 h-10 shrink-0 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-white/10 transition-colors">
           <ArrowLeft size={20} />
@@ -968,66 +1187,21 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
           <h1 className="text-lg font-bold tracking-tight truncate text-accentOrange">{activePlan.name}</h1>
           <div className="flex items-center space-x-2">
             <p className="text-xl font-bold truncate">{DAY_NAMES[activeDay.dayOfWeek]}</p>
-            {dayTags.map((t, i) => <span key={i} className="text-[9px] uppercase font-bold px-2 py-0.5 bg-accentOrange/20 text-accentOrange rounded-full">{t}</span>)}
+            {dayTags.map((t, i) => <span key={i} className="text-[9px] uppercase font-bold px-2 py-0.5 bg-accentOrange/20 text-accentOrange rounded-full" style={{ borderRadius: '9999px' }}>{t}</span>)}
           </div>
         </div>
       </header>
-
-      {/* READONLY MODE */}
-      {dayMode === 'readonly' && (
-        <div className="flex flex-col flex-1 h-full relative">
-          <section className="bg-gradient-to-br from-surface to-[#0A0A0A] border border-border/50 rounded-[32px] p-6 shadow-soft flex justify-between items-center relative overflow-hidden group shrink-0 mb-6">
-            <div className="absolute inset-0 bg-accentOrange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div>
-              <p className="text-sm text-muted font-medium mb-1">Volume Previsto</p>
-              <div className="flex items-baseline space-x-1">
-                <span className="text-4xl font-bold tracking-tighter">{totalDayVolume.toLocaleString()}</span>
-                <span className="text-muted font-medium text-sm">kg</span>
-              </div>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-accentOrange/10 flex items-center justify-center border border-accentOrange/20 shadow-[0_0_20px_rgba(255,159,10,0.15)]">
-              <Dumbbell className="text-accentOrange" size={24} />
-            </div>
-          </section>
-
-          <section className="space-y-3 pb-32">
-            <h2 className="text-xl font-bold tracking-tight px-2 mb-4">{activeDay.exercises.length} Esercizi Programmati</h2>
-            {activeDay.exercises.map((workout) => (
-              <div key={workout.id} className="bg-surface border border-border/50 rounded-3xl p-5 flex items-center justify-between shadow-soft">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center border border-border"><Dumbbell size={20} className="text-muted" /></div>
-                  <div>
-                    <h3 className="font-semibold text-base mb-0.5">{workout.exerciseName}</h3>
-                    <div className="flex items-center space-x-3 text-xs text-muted font-mono">
-                      <span>{workout.sets} Sets</span><span className="opacity-30">•</span><span>{workout.reps} Reps</span>
-                      {workout.weight > 0 && <><span className="opacity-30">•</span><span className="text-accentOrange font-medium px-2 py-0.5 bg-accentOrange/10 rounded-full">{workout.weight} kg</span></>}
-                    </div>
-                  </div>
-                </div>
-                <button onClick={() => removeWorkoutFromDay(workout.id)} className="w-10 h-10 flex items-center justify-center bg-black/50 text-muted rounded-full transition-all hover:bg-red-500/20 hover:text-red-400"><Trash2 size={16} /></button>
-              </div>
-            ))}
-          </section>
-
-          <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/80 to-transparent flex justify-center z-40">
-            <button onClick={() => setDayMode('select')} className="w-full max-w-sm bg-white text-black font-bold text-lg rounded-full py-4 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:bg-neutral-200 transition-all flex items-center justify-center space-x-2">
-              <Edit3 size={18} /><span>Modifica Scheda</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* DRAFT SELECTION MODE */}
       {dayMode === 'select' && (
         <>
           <section className="bg-surface/50 border border-border/50 rounded-[32px] p-2 backdrop-blur-md shadow-soft shrink-0 mb-6">
             <div className="flex space-x-1 mb-4 p-1 bg-black/40 rounded-full overflow-x-auto hide-scrollbar">
-                {['database', 'manual', 'ai', 'vision'].map((mode) => (
-                  <button key={mode} onClick={() => setInputMode(mode)} className={cn("flex-1 py-2.5 px-4 rounded-full text-xs font-semibold capitalize transition-all duration-300 flex justify-center items-center space-x-2 shrink-0", inputMode === mode ? "bg-white text-black shadow-sm" : "text-muted hover:text-white")}>
+                {['database', 'manual', 'ai'].map((mode) => (
+                  <button key={mode} onClick={() => setInputMode(mode)} className={cn("flex-1 py-2.5 px-4 rounded-full text-xs font-semibold capitalize transition-all duration-300 flex justify-center items-center space-x-2 shrink-0", inputMode === mode ? "bg-white text-black shadow-sm" : "text-muted hover:text-white")} style={{ borderRadius: '9999px' }}>
                     {mode === 'database' && <Library size={14} />}
                     {mode === 'manual' && <Plus size={14} />}
                     {mode === 'ai' && <BrainCircuit size={14} />}
-                    {mode === 'vision' && <ScanLine size={14} />}
                     <span>{mode}</span>
                   </button>
                 ))}
@@ -1049,9 +1223,9 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                            <span className="text-xs font-bold text-muted uppercase tracking-widest">Filtro Smart</span>
                         </div>
                         {isDbFilterActive ? (
-                           <button onClick={() => setIsDbFilterActive(false)} className="text-xs font-bold text-accentBlue bg-accentBlue/10 px-3 py-1 rounded-full flex items-center"><X size={12} className="mr-1"/> Libera Tutti</button>
+                           <button onClick={() => setIsDbFilterActive(false)} className="text-xs font-bold text-accentBlue bg-accentBlue/10 px-3 py-1 flex items-center" style={{ borderRadius: '9999px' }}><X size={12} className="mr-1"/> Libera Tutti</button>
                         ) : (
-                           <button onClick={() => setIsDbFilterActive(true)} className="text-xs font-bold text-muted bg-white/5 px-3 py-1 rounded-full border border-border">Riattiva Filtro</button>
+                           <button onClick={() => setIsDbFilterActive(true)} className="text-xs font-bold text-muted bg-white/5 px-3 py-1 border border-border" style={{ borderRadius: '9999px' }}>Riattiva Filtro</button>
                         )}
                       </div>
                     )}
@@ -1066,7 +1240,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                                  <h4 className="font-bold text-sm">{ex.name}</h4>
                                  <div className="flex gap-1 mt-1">{ex.tags.map(t => <span key={t} className="text-[8px] uppercase tracking-widest text-muted bg-black px-1.5 py-0.5 rounded-sm">{t}</span>)}</div>
                                </div>
-                               <button className={cn("w-8 h-8 rounded-full flex items-center justify-center transition-colors", isSelected ? "bg-accentBlue text-white" : "bg-white/5 text-muted hover:bg-white/10")}>
+                               <button className={cn("w-8 h-8 flex items-center justify-center transition-colors", isSelected ? "bg-accentBlue text-white" : "bg-white/5 text-muted hover:bg-white/10")} style={{ borderRadius: '9999px' }}>
                                  {isSelected ? <CheckCircle2 size={16} /> : <Plus size={16} />}
                                </button>
                              </div>
@@ -1075,7 +1249,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                        ) : (
                          <div className="text-center py-8">
                            <p className="text-muted text-sm mb-4">Nessun esercizio trovato.</p>
-                           <button onClick={() => { setFormData({...formData, exerciseName: dbSearch}); setInputMode('manual'); }} className="px-6 py-3 bg-white text-black font-bold text-sm rounded-full">Aggiungi Manualmente</button>
+                           <button onClick={() => { setFormData({...formData, exerciseName: dbSearch}); setInputMode('manual'); }} className="px-6 py-3 bg-white text-black font-bold text-sm" style={{ borderRadius: '9999px' }}>Aggiungi Manualmente</button>
                          </div>
                        )}
                     </div>
@@ -1095,46 +1269,6 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                     <button onClick={handleDraftAi} className="w-full bg-accentOrange text-white font-semibold rounded-3xl py-4 flex items-center justify-center space-x-2"><BrainCircuit size={18} /><span>Genera Bozza</span></button>
                   </div>
                )}
-               {inputMode === 'vision' && (
-                <div className="space-y-4">
-                  <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleVisionSelect} />
-                  <input type="file" accept="image/*" capture="environment" ref={cameraInputRef} className="hidden" onChange={handleVisionSelect} />
-
-                  <div className="h-48 border-2 border-dashed border-border rounded-3xl flex flex-col items-center justify-center bg-black/20 text-muted overflow-hidden relative">
-                    {previewImage ? (
-                      <>
-                        <img src={previewImage} alt="Preview" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-                        {isScanning && (
-                          <>
-                            <motion.div 
-                              className="absolute left-0 right-0 h-1 bg-accentOrange shadow-[0_0_20px_rgba(255,159,10,1)]"
-                              animate={{ top: ["0%", "100%", "0%"] }}
-                              transition={{ duration: 2, ease: "linear", repeat: Infinity }}
-                            ></motion.div>
-                            <div className="flex flex-col items-center space-y-2 z-10 bg-black/70 px-6 py-3 rounded-2xl backdrop-blur-md">
-                              <div className="w-6 h-6 border-2 border-accentOrange border-t-transparent rounded-full animate-spin"></div>
-                              <span className="text-xs font-bold animate-pulse text-white">{scanMessage}</span>
-                            </div>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <ScanLine size={36} className="mb-3 opacity-50" />
-                        <span className="text-sm font-medium">Acquisisci Scheda Cartacea</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex space-x-2">
-                    <button onClick={() => cameraInputRef.current?.click()} disabled={isScanning} className="flex-1 bg-white text-black font-semibold rounded-3xl py-4 hover:bg-neutral-200 flex items-center justify-center space-x-2 disabled:opacity-50 active:scale-[0.98]">
-                      <Camera size={18} /><span>Scatta Foto</span>
-                    </button>
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="flex-1 bg-surface border border-border text-white font-semibold rounded-3xl py-4 hover:bg-surfaceHover flex items-center justify-center space-x-2 disabled:opacity-50 active:scale-[0.98]">
-                      <ImageIcon size={18} /><span>Galleria</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </section>
 
@@ -1147,7 +1281,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                     <span className="text-xs text-muted font-bold uppercase tracking-widest">In Bozza</span>
                     <span className="text-xl font-bold">{draftExercises.length} Esercizi</span>
                   </div>
-                  <button onClick={() => setDayMode('refine')} className="bg-white text-black font-bold px-8 py-3 rounded-full flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95">
+                  <button onClick={confirmSelection} className="bg-white text-black font-bold px-8 py-3 flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95" style={{ borderRadius: '9999px' }}>
                     Avanti <MoveRight size={18} className="ml-2"/>
                   </button>
                 </div>
@@ -1157,39 +1291,180 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
         </>
       )}
 
-      {/* REFINEMENT MODE */}
+      {/* REFINEMENT MODE (The Lab) */}
       {dayMode === 'refine' && (
         <div className="flex flex-col flex-1 h-full relative">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold tracking-tight mb-2">Rifinisci Esercizi</h2>
-            <p className="text-muted text-sm">Imposta serie, ripetizioni e chili per completare la giornata.</p>
+          
+          <section className="bg-gradient-to-br from-surface to-[#0A0A0A] border border-border/50 rounded-[32px] p-6 shadow-soft flex justify-between items-center relative overflow-hidden group shrink-0 mb-6">
+            <div className="absolute inset-0 bg-accentOrange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div>
+              <p className="text-sm text-muted font-medium mb-1">Volume Previsto</p>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-4xl font-bold tracking-tighter">{totalDayVolume.toLocaleString()}</span>
+                <span className="text-muted font-medium text-sm">kg</span>
+              </div>
+            </div>
+            <div className="w-14 h-14 bg-accentOrange/10 flex items-center justify-center border border-accentOrange/20 shadow-[0_0_20px_rgba(255,159,10,0.15)]" style={{ borderRadius: '9999px' }}>
+              <Dumbbell className="text-accentOrange" size={24} />
+            </div>
+          </section>
+
+          <div className="mb-6 flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight mb-1">Laboratorio</h2>
+              <p className="text-muted text-sm">{activeDay.exercises.length} Esercizi Programmati</p>
+            </div>
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => setIsReorderMode(!isReorderMode)} 
+                className={cn("px-4 py-2 text-xs font-bold border transition-all flex items-center", isReorderMode ? "bg-accentBlue text-white border-accentBlue" : "bg-surface text-muted border-border hover:text-white")}
+                style={{ borderRadius: '9999px' }}
+              >
+                {isReorderMode ? "Fatto" : <><ListOrdered size={14} className="mr-1"/> Riordina</>}
+              </button>
+              {!isReorderMode && (
+                <button 
+                  onClick={() => setDayMode('select')} 
+                  className="text-xs font-bold text-accentOrange bg-accentOrange/10 px-4 py-2 border border-accentOrange/30 hover:bg-accentOrange/20 active:scale-95 transition-all flex items-center"
+                  style={{ borderRadius: '9999px' }}
+                >
+                   <Plus size={14} className="mr-1"/> Aggiungi
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4 pb-32">
-            {draftExercises.map((draft, idx) => (
-              <div key={draft.id} className="bg-surface border border-border rounded-3xl p-5 shadow-soft">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-lg">{draft.exerciseName}</h3>
-                  <button onClick={() => setDraftExercises(prev => prev.filter(d => d.id !== draft.id))} className="text-muted hover:text-red-400"><Trash2 size={16}/></button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="relative"><span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase">Set</span><input type="number" value={draft.sets} onChange={(e) => { const newD = [...draftExercises]; newD[idx].sets = e.target.value; setDraftExercises(newD); }} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none focus:border-accentOrange font-mono" min="1" /></div>
-                  <div className="relative"><span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase">Rep</span><input type="number" value={draft.reps} onChange={(e) => { const newD = [...draftExercises]; newD[idx].reps = e.target.value; setDraftExercises(newD); }} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none focus:border-accentOrange font-mono" min="1" /></div>
-                  <div className="relative"><span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase">Kg</span><input type="number" value={draft.weight} onChange={(e) => { const newD = [...draftExercises]; newD[idx].weight = e.target.value; setDraftExercises(newD); }} className="w-full bg-black/50 border border-border rounded-2xl pl-8 pr-2 py-3 text-sm focus:outline-none focus:border-accentOrange font-mono" min="0" step="0.5" /></div>
-                </div>
-              </div>
-            ))}
+            {activeDay.exercises.length === 0 && (
+              <div className="text-center py-10 border border-dashed border-border rounded-3xl text-muted">Nessun esercizio nel laboratorio.</div>
+            )}
             
-            <button onClick={() => setDayMode('select')} className="w-full py-4 text-sm font-bold text-muted bg-white/5 rounded-3xl border border-dashed border-border flex justify-center items-center hover:text-white">
-              <Plus size={16} className="mr-2"/> Aggiungi altri esercizi
-            </button>
+            {isReorderMode ? (
+              <Reorder.Group axis="y" values={activeDay.exercises} onReorder={updateExercisesList} className="space-y-2">
+                {activeDay.exercises.map((workout, idx) => (
+                  <Reorder.Item key={workout.id} value={workout} className="bg-surface border border-border rounded-2xl p-4 flex items-center justify-between shadow-sm active:scale-95 transition-transform">
+                    <div className="flex items-center space-x-4">
+                      <span className="text-muted font-bold w-6 text-right">{idx + 1}.</span>
+                      <span className="font-bold text-lg">{workout.exerciseName}</span>
+                    </div>
+                    <div className="text-muted cursor-grab active:cursor-grabbing p-2"><GripVertical size={20}/></div>
+                  </Reorder.Item>
+                ))}
+              </Reorder.Group>
+            ) : (
+              <div className="space-y-4">
+                {activeDay.exercises.map((workout, idx) => {
+                  const isCollapsed = collapsedCards[workout.id];
+                  return (
+                    <div key={workout.id} className="bg-surface border border-border rounded-[32px] overflow-hidden shadow-soft flex flex-col relative z-0">
+                      
+                      {/* Header Esercizio */}
+                      <div className="p-5 flex items-start justify-between border-b border-border/50 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => toggleCollapse(workout.id)}>
+                         <div className="flex items-center space-x-3">
+                            <span className="text-muted font-bold w-6 text-right text-lg">{idx + 1}.</span>
+                            <div>
+                              <h3 className="font-bold text-lg leading-tight">{workout.exerciseName}</h3>
+                              {workout.isExpanded && !isCollapsed && (
+                                <span className="text-[10px] font-bold text-accentOrange uppercase tracking-widest bg-accentOrange/10 px-2 py-0.5 inline-block mt-1" style={{ borderRadius: '9999px' }}>Avanzato</span>
+                              )}
+                            </div>
+                         </div>
+                         <div className="flex items-center space-x-2">
+                            <button onClick={(e) => { e.stopPropagation(); removeWorkout(workout.id); }} className="text-muted hover:text-red-400 p-2"><Trash2 size={16}/></button>
+                            <div className="p-2 text-muted">{isCollapsed ? <ChevronDown size={20}/> : <ChevronUp size={20}/>}</div>
+                         </div>
+                      </div>
+
+                      {/* Body */}
+                      {!isCollapsed && (
+                        <div className="p-5">
+                          {!workout.isExpanded ? (
+                            <div className="flex flex-col space-y-4">
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="relative">
+                                  <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Set</span>
+                                  <div onClick={() => openPicker('Set', SETS_OPTIONS, workout.sets || 3, '', (val) => updateWorkout(workout.id, {sets: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.sets || 3}</div>
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Rep</span>
+                                  <div onClick={() => openPicker('Ripetizioni', REPS_OPTIONS, workout.reps || 10, '', (val) => updateWorkout(workout.id, {reps: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.reps || 10}</div>
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Kg</span>
+                                  <div onClick={() => openPicker('Carico', KG_OPTIONS, workout.weight || 0, 'kg', (val) => updateWorkout(workout.id, {weight: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-8 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.weight || 0}</div>
+                                </div>
+                              </div>
+                              <button onClick={() => expandToAdvanced(workout.id)} className="w-full py-2.5 text-xs font-bold text-accentBlue bg-accentBlue/10 rounded-2xl flex justify-center items-center hover:bg-accentBlue/20 transition-colors">
+                                <Settings2 size={14} className="mr-2"/> Dettaglio Serie Singole
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col space-y-3">
+                               <div className="flex text-[10px] uppercase font-bold text-muted px-2 mb-1">
+                                 <div className="w-8 text-center">Set</div>
+                                 <div className="w-10 text-center">Warm</div>
+                                 <div className="flex-1 text-center">Reps</div>
+                                 <div className="flex-1 text-center">Kg</div>
+                                 <div className="w-8"></div>
+                               </div>
+                               
+                               {workout.setDetails.map((set, sIdx) => (
+                                 <div key={set.id} className={cn("flex items-center space-x-2 p-2 rounded-2xl border transition-colors", set.isWarmup ? "bg-accentOrange/5 border-accentOrange/20" : "bg-black/30 border-border")}>
+                                   <div className="w-8 text-center font-bold text-muted">{sIdx + 1}</div>
+                                   <div className="w-10 flex justify-center">
+                                     <button 
+                                       onClick={() => updateDetailedRow(workout.id, set.id, 'isWarmup', !set.isWarmup)}
+                                       className={cn("w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] transition-colors", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}
+                                     >W</button>
+                                   </div>
+                                   <div className="flex-1">
+                                     <div onClick={() => openPicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
+                                   </div>
+                                   <div className="flex-1">
+                                     <div onClick={() => openPicker('Carico', KG_OPTIONS, set.weight, 'kg', (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
+                                   </div>
+                                   <div className="w-8 flex justify-center">
+                                     <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
+                                   </div>
+                                 </div>
+                               ))}
+
+                               <div className="flex space-x-2 pt-2">
+                                 <button onClick={() => addDetailedRow(workout.id)} className="flex-1 py-2 text-xs font-bold text-muted bg-white/5 rounded-xl border border-dashed border-border flex justify-center items-center hover:text-white transition-colors">
+                                   <Plus size={14} className="mr-1"/> Nuova Serie
+                                 </button>
+                               </div>
+                               
+                               {/* Extra Tools per Advanced */}
+                               <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
+                                  <div className="relative cursor-pointer" onClick={() => openPicker('Recupero', REST_OPTIONS, workout.restTime || 0, 's', (val) => updateWorkout(workout.id, {restTime: val}))}>
+                                    <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                                    <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">{workout.restTime ? `${workout.restTime}s` : 'Recupero...'}</div>
+                                  </div>
+                                  <div className="relative">
+                                    <NotebookPen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                                    <input type="text" placeholder="Note tecniche" value={workout.notes || ''} onChange={(e) => updateWorkout(workout.id, {notes: e.target.value})} className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-white/50 transition-colors" />
+                                  </div>
+                               </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/80 to-transparent flex justify-center z-40">
-            <button onClick={confirmRefinement} disabled={draftExercises.length === 0} className="w-full max-w-sm bg-accentOrange text-white font-bold text-lg rounded-full py-4 shadow-[0_0_30px_rgba(255,159,10,0.4)] hover:opacity-90 transition-all active:scale-95 disabled:opacity-50">
-              Conferma Giorno
-            </button>
-          </div>
+          {!isReorderMode && (
+            <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/80 to-transparent flex justify-center z-40 pb-safe">
+              <button onClick={() => setRoute('plan-details')} className="w-full max-w-sm bg-accentOrange text-white font-bold text-lg py-4 shadow-[0_0_30px_rgba(255,159,10,0.4)] hover:opacity-90 transition-all active:scale-95 flex items-center justify-center" style={{ borderRadius: '9999px' }}>
+                <CheckCircle2 size={20} className="mr-2"/> Fatto
+              </button>
+            </div>
+          )}
         </div>
       )}
 

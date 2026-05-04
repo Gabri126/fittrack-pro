@@ -15,3 +15,12 @@
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Snap scrolling for Custom Picker */
+.snap-y-mandatory {
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.snap-center-item {
+  scroll-snap-align: center;
+}
