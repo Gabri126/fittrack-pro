@@ -3,37 +3,7 @@ import { PlayCircle, CheckCircle2, Trophy, AlertTriangle, ArrowLeft, Heart, Flam
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { cn } from '../App';
-
-const WheelPicker = ({ items, value, onChange, formatLabel = (v) => v }) => {
-  const containerRef = useRef(null);
-  const itemHeight = 48;
-
-  useEffect(() => {
-    const idx = items.indexOf(value);
-    if (idx !== -1 && containerRef.current) {
-      containerRef.current.scrollTop = idx * itemHeight;
-    }
-  }, []); 
-
-  const handleScroll = (e) => {
-    const idx = Math.round(e.target.scrollTop / itemHeight);
-    if (items[idx] !== undefined && items[idx] !== value) {
-       onChange(items[idx]);
-    }
-  };
-
-  return (
-    <div className="flex-1 h-[144px] overflow-y-scroll snap-y snap-mandatory hide-scrollbar relative" ref={containerRef} onScroll={handleScroll} style={{ scrollBehavior: 'smooth' }}>
-      <div className="h-[48px]" />
-      {items.map((item, i) => (
-        <div key={i} className={cn("h-[48px] snap-center flex items-center justify-center text-4xl md:text-5xl font-bold font-mono transition-all duration-100", item === value ? "text-white opacity-100 scale-110" : "text-muted opacity-30 scale-90")}>
-          {formatLabel(item)}
-        </div>
-      ))}
-      <div className="h-[48px]" />
-    </div>
-  );
-};
+import { SingleScrollPicker, WeightScrollPicker } from '../components/Pickers';
 
 export default function LiveView({ library, activeWorkout, setActiveWorkout, setHistory, history, startTimer, resetTimer, setCurrentTab, setIsTabBarHidden }) {
   const activePlan = library.find(p => p.status === 'active');
@@ -300,11 +270,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
   };
 
   // Picker Configuration
-  const kgIntegers = useMemo(() => Array.from({ length: 301 }, (_, i) => i), []);
-  const kgDecimals = useMemo(() => [0, 0.25, 0.5, 0.75], []);
   const repsArray = useMemo(() => Array.from({ length: 100 }, (_, i) => i + 1), []);
-
-  const getDecimalFormat = (num) => num === 0 ? '.0' : num.toString().replace('0.', '.');
 
   // -- RENDERING --
 
@@ -661,57 +627,22 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
         )}
       </AnimatePresence>
 
-      {/* Centered Modal Native Picker */}
-      <AnimatePresence>
-        {activePicker && currentSet && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm" 
-              onClick={() => setActivePicker(null)} 
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full max-w-sm bg-surface/95 backdrop-blur-xl rounded-[32px] p-6 border border-border/50 shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-10"
-            >
-               <div className="flex justify-between items-center mb-6">
-                 <h3 className="font-bold text-xl">{activePicker === 'weight' ? 'Carico (Kg)' : 'Ripetizioni'}</h3>
-                 <button onClick={() => setActivePicker(null)} className="text-white font-bold bg-white/10 px-6 py-2 rounded-full hover:bg-white/20 active:scale-95 transition-all">Fatto</button>
-               </div>
-               
-               <div className="relative flex items-center justify-center px-4 mb-4">
-                  {/* Highlight Band (Glass effect) */}
-                  <div className="absolute top-1/2 -translate-y-1/2 left-4 right-4 h-[48px] bg-white/10 rounded-xl pointer-events-none border border-white/5" />
-                  
-                  {activePicker === 'weight' ? (
-                     <div className="flex w-full items-center">
-                       <WheelPicker 
-                         items={kgIntegers} 
-                         value={Math.floor(currentSet.weight)} 
-                         onChange={v => updateSet(currentExercise.id, currentSet.id, 'weight', v + (currentSet.weight % 1))} 
-                       />
-                       <span className="text-3xl font-bold font-mono text-muted mb-2 px-2">.</span>
-                       <WheelPicker 
-                         items={kgDecimals} 
-                         value={currentSet.weight % 1} 
-                         formatLabel={getDecimalFormat}
-                         onChange={v => updateSet(currentExercise.id, currentSet.id, 'weight', Math.floor(currentSet.weight) + v)} 
-                       />
-                     </div>
-                  ) : (
-                     <div className="flex w-full">
-                       <WheelPicker 
-                         items={repsArray} 
-                         value={currentSet.reps} 
-                         onChange={v => updateSet(currentExercise.id, currentSet.id, 'reps', v)} 
-                       />
-                     </div>
-                  )}
-               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Bottom Sheet Pickers */}
+      <SingleScrollPicker 
+        isOpen={activePicker === 'reps'}
+        onClose={() => setActivePicker(null)}
+        title="Ripetizioni"
+        options={repsArray}
+        initialValue={currentSet?.reps}
+        onSelect={val => updateSet(currentExercise.id, currentSet.id, 'reps', val)}
+      />
+      <WeightScrollPicker 
+        isOpen={activePicker === 'weight'}
+        onClose={() => setActivePicker(null)}
+        title="Carico (Kg)"
+        initialValue={currentSet?.weight}
+        onSelect={val => updateSet(currentExercise.id, currentSet.id, 'weight', val)}
+      />
     </div>
   );
 }

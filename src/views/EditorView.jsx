@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus, GripVertical, Settings2, Timer, NotebookPen, ChevronDown, ChevronUp, ListOrdered } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { cn } from '../App';
+import { SingleScrollPicker, WeightScrollPicker, TimeScrollPicker } from '../components/Pickers';
 
 const initialForm = { exerciseName: '', sets: '', reps: '', weight: '' };
 
@@ -69,87 +70,6 @@ const REPS_OPTIONS = Array.from({length: 50}, (_, i) => i + 1); // 1-50
 const KG_OPTIONS = Array.from({length: 401}, (_, i) => i * 0.5); // 0-200kg
 const REST_OPTIONS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 300, 360];
 
-const ScrollPicker = ({ isOpen, onClose, title, options, initialValue, onSelect, unit }) => {
-  const scrollRef = useRef(null);
-  const [selectedValue, setSelectedValue] = useState(initialValue);
-  const lastVibratedValue = useRef(initialValue);
-  const itemHeight = 56; // 14 * 4px = 56px
-
-  useEffect(() => {
-    if (isOpen && scrollRef.current) {
-      const parsedInitial = parseFloat(initialValue);
-      const idx = options.findIndex(o => parseFloat(o) === parsedInitial);
-      if (idx !== -1) {
-        setTimeout(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = idx * itemHeight;
-            setSelectedValue(options[idx]);
-            lastVibratedValue.current = options[idx];
-          }
-        }, 10);
-      } else {
-        setSelectedValue(options[0]);
-      }
-    }
-  }, [isOpen, initialValue, options]);
-
-  const handleScroll = (e) => {
-    if (!scrollRef.current) return;
-    const scrollY = e.target.scrollTop;
-    const idx = Math.round(scrollY / itemHeight);
-    const validIdx = Math.max(0, Math.min(idx, options.length - 1));
-    const newVal = options[validIdx];
-    
-    if (String(newVal) !== String(lastVibratedValue.current)) {
-      if (navigator.vibrate) navigator.vibrate(5);
-      lastVibratedValue.current = newVal;
-      setSelectedValue(newVal);
-    }
-  };
-
-  const handleConfirm = () => {
-    onSelect(selectedValue);
-    onClose();
-  };
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="relative w-full max-w-md bg-surface/95 backdrop-blur-xl rounded-t-[32px] border-t border-border/50 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10 flex flex-col overflow-hidden pb-safe">
-            <div className="flex justify-between items-center p-6 border-b border-white/10 shrink-0">
-               <h3 className="font-bold text-xl">{title}</h3>
-               <button onClick={handleConfirm} className="text-white font-bold bg-accentOrange px-6 py-2 rounded-full hover:bg-orange-500 active:scale-95 transition-all shadow-[0_0_15px_rgba(255,159,10,0.4)]">Fatto</button>
-            </div>
-            
-            <div className="relative h-[300px] w-full flex items-center justify-center bg-black/50">
-               <div className="absolute top-0 w-full h-[122px] bg-gradient-to-b from-surface/95 to-transparent z-10 pointer-events-none" />
-               <div className="absolute bottom-0 w-full h-[122px] bg-gradient-to-t from-surface/95 to-transparent z-10 pointer-events-none" />
-               
-               <div className="absolute top-1/2 -translate-y-1/2 w-full h-14 bg-white/5 border-y border-white/10 z-0 pointer-events-none" />
-               
-               <div 
-                 ref={scrollRef}
-                 onScroll={handleScroll}
-                 className="w-full h-full overflow-y-auto hide-scrollbar snap-y-mandatory px-4 relative z-20"
-               >
-                  <div className="h-[122px] shrink-0" />
-                  {options.map((opt, i) => (
-                    <div key={i} className="h-14 flex items-center justify-center snap-center-item shrink-0 text-3xl font-bold font-mono">
-                      <span className={String(selectedValue) === String(opt) ? "text-white" : "text-muted"}>{opt} <span className="text-sm font-normal text-muted/50 ml-1">{unit}</span></span>
-                    </div>
-                  ))}
-                  <div className="h-[122px] shrink-0" />
-               </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-};
-
 export default function EditorView({ library, setLibrary, history, setCurrentTab }) {
   const [route, setRoute] = useState('dashboard'); // dashboard, plan-details, day-edit, wizard
   const [selectedPlanId, setSelectedPlanId] = useState(null);
@@ -176,7 +96,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   const [isBinOverlayOpen, setIsBinOverlayOpen] = useState(false);
 
   // Focus & Picker States
-  const [pickerConfig, setPickerConfig] = useState({ isOpen: false });
+  const [pickerConfig, setPickerConfig] = useState({ isOpen: false, type: 'single' });
   const [collapsedCards, setCollapsedCards] = useState({});
   const [isReorderMode, setIsReorderMode] = useState(false);
 
@@ -494,13 +414,34 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     updateWorkout(workoutId, { setDetails: newSets });
   };
 
-  const openPicker = (title, options, initialValue, unit, onSelect) => {
+  const openSinglePicker = (title, options, initialValue, unit, onSelect) => {
     setPickerConfig({
       isOpen: true,
+      type: 'single',
       title,
       options,
       initialValue,
       unit,
+      onSelect
+    });
+  };
+
+  const openWeightPicker = (title, initialValue, onSelect) => {
+    setPickerConfig({
+      isOpen: true,
+      type: 'weight',
+      title,
+      initialValue,
+      onSelect
+    });
+  };
+
+  const openTimePicker = (title, initialValue, onSelect) => {
+    setPickerConfig({
+      isOpen: true,
+      type: 'time',
+      title,
+      initialValue,
       onSelect
     });
   };
@@ -1177,7 +1118,21 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       exit={{ borderRadius: '9999px' }}
       style={{ originX: 0.5, originY: 0.5 }}
     >
-      <ScrollPicker {...pickerConfig} onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} />
+      <SingleScrollPicker 
+        isOpen={pickerConfig.isOpen && pickerConfig.type === 'single'} 
+        onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
+        {...pickerConfig} 
+      />
+      <WeightScrollPicker 
+        isOpen={pickerConfig.isOpen && pickerConfig.type === 'weight'} 
+        onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
+        {...pickerConfig} 
+      />
+      <TimeScrollPicker 
+        isOpen={pickerConfig.isOpen && pickerConfig.type === 'time'} 
+        onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
+        {...pickerConfig} 
+      />
 
       <header className="sticky top-0 z-30 pt-6 pb-4 bg-black/90 backdrop-blur-md border-b border-border/50 flex items-center space-x-4 shrink-0">
         <button onClick={handleDayExit} className="w-10 h-10 shrink-0 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-white/10 transition-colors">
@@ -1383,15 +1338,15 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                               <div className="grid grid-cols-3 gap-2">
                                 <div className="relative">
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Set</span>
-                                  <div onClick={() => openPicker('Set', SETS_OPTIONS, workout.sets || 3, '', (val) => updateWorkout(workout.id, {sets: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.sets || 3}</div>
+                                  <div onClick={() => openSinglePicker('Set', SETS_OPTIONS, workout.sets || 3, '', (val) => updateWorkout(workout.id, {sets: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.sets || 3}</div>
                                 </div>
                                 <div className="relative">
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Rep</span>
-                                  <div onClick={() => openPicker('Ripetizioni', REPS_OPTIONS, workout.reps || 10, '', (val) => updateWorkout(workout.id, {reps: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.reps || 10}</div>
+                                  <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, workout.reps || 10, '', (val) => updateWorkout(workout.id, {reps: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.reps || 10}</div>
                                 </div>
                                 <div className="relative">
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Kg</span>
-                                  <div onClick={() => openPicker('Carico', KG_OPTIONS, workout.weight || 0, 'kg', (val) => updateWorkout(workout.id, {weight: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-8 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.weight || 0}</div>
+                                  <div onClick={() => openWeightPicker('Carico (Kg)', workout.weight || 0, (val) => updateWorkout(workout.id, {weight: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-8 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.weight || 0}</div>
                                 </div>
                               </div>
                               <button onClick={() => expandToAdvanced(workout.id)} className="w-full py-2.5 text-xs font-bold text-accentBlue bg-accentBlue/10 rounded-2xl flex justify-center items-center hover:bg-accentBlue/20 transition-colors">
@@ -1418,10 +1373,10 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                                      >W</button>
                                    </div>
                                    <div className="flex-1">
-                                     <div onClick={() => openPicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
+                                     <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
                                    </div>
                                    <div className="flex-1">
-                                     <div onClick={() => openPicker('Carico', KG_OPTIONS, set.weight, 'kg', (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
+                                     <div onClick={() => openWeightPicker('Carico (Kg)', set.weight, (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
                                    </div>
                                    <div className="w-8 flex justify-center">
                                      <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
@@ -1437,9 +1392,11 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                                
                                {/* Extra Tools per Advanced */}
                                <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
-                                  <div className="relative cursor-pointer" onClick={() => openPicker('Recupero', REST_OPTIONS, workout.restTime || 0, 's', (val) => updateWorkout(workout.id, {restTime: val}))}>
+                                  <div className="relative cursor-pointer" onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
                                     <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                    <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">{workout.restTime ? `${workout.restTime}s` : 'Recupero...'}</div>
+                                    <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">
+                                      {workout.restTime ? `${Math.floor(workout.restTime / 60)}m ${workout.restTime % 60}s` : 'Recupero...'}
+                                    </div>
                                   </div>
                                   <div className="relative">
                                     <NotebookPen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
