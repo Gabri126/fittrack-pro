@@ -110,10 +110,11 @@ export const WeightScrollPicker = ({ isOpen, onClose, title, initialValue, onSel
       const t = Math.floor(intVal / 10) % 10;
       const u = intVal % 10;
       
+      const decRounded = Math.round(decValNum * 100) / 100;
       let dStr = '.00';
-      if (decValNum === 0.25) dStr = '.25';
-      else if (decValNum === 0.5) dStr = '.50';
-      else if (decValNum === 0.75) dStr = '.75';
+      if (decRounded === 0.25) dStr = '.25';
+      else if (decRounded === 0.5) dStr = '.50';
+      else if (decRounded === 0.75) dStr = '.75';
 
       setTimeout(() => {
         if (hScrollRef.current) { hScrollRef.current.scrollTop = h * itemHeight; setSelH(h); lastVib.current.h = h; }
@@ -326,6 +327,70 @@ export const TimeScrollPicker = ({ isOpen, onClose, title, initialValue, onSelec
                     <div className="h-[97px] shrink-0" />
                  </div>
                </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export const NotesModal = ({ isOpen, onClose, initialValue, onSave }) => {
+  const [text, setText] = useState(initialValue || '');
+
+  useEffect(() => {
+    if (isOpen) setText(initialValue || '');
+  }, [isOpen, initialValue]);
+
+  const handleSave = () => {
+    onSave(text);
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center"
+          style={{ WebkitTouchCallout: 'none' }}
+          onContextMenu={(e) => { e.preventDefault(); return false; }}
+        >
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="relative w-full max-w-md bg-[#1c1c1e] border-t border-border/50 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10 flex flex-col overflow-hidden"
+          >
+            <div className="flex justify-between items-center p-5 shrink-0 bg-[#2c2c2e]">
+              <h3 className="font-bold text-lg text-white">Note Tecniche</h3>
+              <button
+                onClick={handleSave}
+                className="text-white font-bold bg-accentOrange px-5 py-1.5 rounded-full hover:bg-orange-500 active:scale-95 transition-all"
+              >
+                Salva
+              </button>
+            </div>
+            <div className="p-5 pb-10" style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
+              <textarea
+                autoFocus
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Es: Mantieni le scapole retratte. Pausa di 1s in fondo. Non rimbalzare sul petto..."
+                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-accentOrange/60 transition-colors resize-none min-h-[200px] leading-relaxed"
+                style={{ userSelect: 'text', WebkitUserSelect: 'text', touchAction: 'auto' }}
+              />
+              {text.length > 0 && (
+                <button
+                  onClick={() => setText('')}
+                  className="mt-3 text-xs text-muted/60 hover:text-red-400 transition-colors"
+                >
+                  Cancella nota
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

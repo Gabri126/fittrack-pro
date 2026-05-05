@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus, GripVertical, Settings2, Timer, NotebookPen, ChevronDown, ChevronUp, ListOrdered } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { cn } from '../App';
-import { SingleScrollPicker, WeightScrollPicker, TimeScrollPicker } from '../components/Pickers';
+import { SingleScrollPicker, WeightScrollPicker, TimeScrollPicker, NotesModal } from '../components/Pickers';
 
 const initialForm = { exerciseName: '', sets: '', reps: '', weight: '' };
 
@@ -97,15 +97,20 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
 
   // Focus & Picker States
   const [pickerConfig, setPickerConfig] = useState({ isOpen: false, type: 'single' });
+  const [notesModalConfig, setNotesModalConfig] = useState({ isOpen: false, workoutId: null, value: '' });
   const [collapsedCards, setCollapsedCards] = useState({});
   const [isReorderMode, setIsReorderMode] = useState(false);
 
-  // Wiggle Mode States
+  // Wiggle Mode States (Days)
   const [isWiggleMode, setIsWiggleMode] = useState(false);
   const [draggedDayIdx, setDraggedDayIdx] = useState(null);
   const pressTimer = useRef(null);
   const circleRefs = useRef(new Map());
   const hoverTargetRef = useRef(null);
+
+  // Wiggle Mode States (Exercises)
+  const [draggedWorkoutId, setDraggedWorkoutId] = useState(null);
+  const exercisePressTimer = useRef(null);
 
   // -- HELPERS --
   const activePlan = library.find(p => p.id === selectedPlanId);
@@ -447,6 +452,19 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   };
 
   const toggleCollapse = (id) => setCollapsedCards(p => ({...p, [id]: !p[id]}));
+
+  const handleExercisePointerDown = (workoutId) => {
+    if (!isReorderMode) {
+      exercisePressTimer.current = setTimeout(() => {
+        setIsReorderMode(true);
+        if (navigator.vibrate) navigator.vibrate(20);
+      }, 500);
+    }
+  };
+
+  const handleExercisePointerUp = () => {
+    if (exercisePressTimer.current) clearTimeout(exercisePressTimer.current);
+  };
 
   const updateDayTags = (dayId, tags) => {
     setLibrary(prev => prev.map(p => {
@@ -1101,6 +1119,16 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
 
   // --- FULLSCREEN DAY EDIT VIEW (Shared Element) ---
   const totalDayVolume = calculateVolume(activeDay.exercises);
+  const totalEstimatedMinutes = (() => {
+    const exs = activeDay.exercises;
+    let totalSecs = 0;
+    exs.forEach(ex => {
+      const numSets = ex.isExpanded && ex.setDetails ? ex.setDetails.length : (parseInt(ex.sets) || 0);
+      totalSecs += numSets * 60;
+      if (ex.restTime) totalSecs += (parseInt(ex.restTime) || 0) * numSets;
+    });
+    return Math.round(totalSecs / 60);
+  })();
   const dbSearchLower = dbSearch.toLowerCase().trim();
   const dayTags = activeDay.tags || [];
   const filteredDbExercises = EXERCISE_DB.filter(ex => {
@@ -1108,6 +1136,8 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     if (isDbFilterActive && dayTags.length > 0) return ex.tags.some(t => dayTags.includes(t));
     return true; 
   });
+  // Destructure pickerConfig so spread never overrides explicit isOpen prop
+  const { isOpen: _pickerIsOpen, type: _pickerType, ...restPickerConfig } = pickerConfig;
 
   return (
     <motion.div 
@@ -1121,18 +1151,25 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       <SingleScrollPicker 
         isOpen={pickerConfig.isOpen && pickerConfig.type === 'single'} 
         onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
-        {...pickerConfig} 
+        {...restPickerConfig} 
       />
       <WeightScrollPicker 
         isOpen={pickerConfig.isOpen && pickerConfig.type === 'weight'} 
         onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
-        {...pickerConfig} 
+        {...restPickerConfig} 
       />
       <TimeScrollPicker 
         isOpen={pickerConfig.isOpen && pickerConfig.type === 'time'} 
         onClose={() => setPickerConfig({ ...pickerConfig, isOpen: false })} 
-        {...pickerConfig} 
+        {...restPickerConfig} 
       />
+      <NotesModal
+        isOpen={notesModalConfig.isOpen}
+        onClose={() => setNotesModalConfig(p => ({ ...p, isOpen: false }))}
+        initialValue={notesModalConfig.value}
+        onSave={(text) => updateWorkout(notesModalConfig.workoutId, { notes: text })}
+      />
+
 
       <header className="sticky top-0 z-30 pt-6 pb-4 bg-black/90 backdrop-blur-md border-b border-border/50 flex items-center space-x-4 shrink-0">
         <button onClick={handleDayExit} className="w-10 h-10 shrink-0 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-white/10 transition-colors">
@@ -1252,11 +1289,21 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
           
           <section className="bg-gradient-to-br from-surface to-[#0A0A0A] border border-border/50 rounded-[32px] p-6 shadow-soft flex justify-between items-center relative overflow-hidden group shrink-0 mb-6">
             <div className="absolute inset-0 bg-accentOrange/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div>
-              <p className="text-sm text-muted font-medium mb-1">Volume Previsto</p>
-              <div className="flex items-baseline space-x-1">
-                <span className="text-4xl font-bold tracking-tighter">{totalDayVolume.toLocaleString()}</span>
-                <span className="text-muted font-medium text-sm">kg</span>
+            <div className="flex gap-8 relative z-10">
+              <div>
+                <p className="text-sm text-muted font-medium mb-1">Volume Previsto</p>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-4xl font-bold tracking-tighter">{totalDayVolume.toLocaleString()}</span>
+                  <span className="text-muted font-medium text-sm">kg</span>
+                </div>
+              </div>
+              <div className="w-px bg-white/10 self-stretch"></div>
+              <div>
+                <p className="text-sm text-muted font-medium mb-1">Tempo Stimato</p>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-4xl font-bold tracking-tighter">{totalEstimatedMinutes}</span>
+                  <span className="text-muted font-medium text-sm">min</span>
+                </div>
               </div>
             </div>
             <div className="w-14 h-14 bg-accentOrange/10 flex items-center justify-center border border-accentOrange/20 shadow-[0_0_20px_rgba(255,159,10,0.15)]" style={{ borderRadius: '9999px' }}>
@@ -1268,24 +1315,40 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
             <div>
               <h2 className="text-2xl font-bold tracking-tight mb-1">Laboratorio</h2>
               <p className="text-muted text-sm">{activeDay.exercises.length} Esercizi Programmati</p>
+              {dayTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {dayTags.map((t, i) => (
+                    <span key={i} className="text-[9px] uppercase font-bold px-2 py-0.5 bg-accentOrange/15 text-accentOrange border border-accentOrange/30" style={{ borderRadius: '9999px' }}>{t}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex space-x-2">
-              <button 
-                onClick={() => setIsReorderMode(!isReorderMode)} 
-                className={cn("px-4 py-2 text-xs font-bold border transition-all flex items-center", isReorderMode ? "bg-accentBlue text-white border-accentBlue" : "bg-surface text-muted border-border hover:text-white")}
-                style={{ borderRadius: '9999px' }}
-              >
-                {isReorderMode ? "Fatto" : <><ListOrdered size={14} className="mr-1"/> Riordina</>}
-              </button>
-              {!isReorderMode && (
-                <button 
-                  onClick={() => setDayMode('select')} 
-                  className="text-xs font-bold text-accentOrange bg-accentOrange/10 px-4 py-2 border border-accentOrange/30 hover:bg-accentOrange/20 active:scale-95 transition-all flex items-center"
-                  style={{ borderRadius: '9999px' }}
-                >
-                   <Plus size={14} className="mr-1"/> Aggiungi
-                </button>
-              )}
+              <AnimatePresence mode="wait">
+                {isReorderMode ? (
+                  <motion.button
+                    key="fatto"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    onClick={() => setIsReorderMode(false)}
+                    className="px-5 py-2 text-xs font-bold bg-accentBlue text-white border border-accentBlue shadow-[0_0_15px_rgba(10,132,255,0.4)] active:scale-95 transition-all"
+                    style={{ borderRadius: '9999px' }}
+                  >
+                    Fatto
+                  </motion.button>
+                ) : (
+                  <motion.div key="actions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex space-x-2">
+                    <button
+                      onClick={() => setDayMode('select')}
+                      className="text-xs font-bold text-accentOrange bg-accentOrange/10 px-4 py-2 border border-accentOrange/30 hover:bg-accentOrange/20 active:scale-95 transition-all flex items-center"
+                      style={{ borderRadius: '9999px' }}
+                    >
+                      <Plus size={14} className="mr-1"/> Aggiungi
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -1294,44 +1357,74 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
               <div className="text-center py-10 border border-dashed border-border rounded-3xl text-muted">Nessun esercizio nel laboratorio.</div>
             )}
             
-            {isReorderMode ? (
-              <Reorder.Group axis="y" values={activeDay.exercises} onReorder={updateExercisesList} className="space-y-2">
-                {activeDay.exercises.map((workout, idx) => (
-                  <Reorder.Item key={workout.id} value={workout} className="bg-surface border border-border rounded-2xl p-4 flex items-center justify-between shadow-sm active:scale-95 transition-transform">
-                    <div className="flex items-center space-x-4">
-                      <span className="text-muted font-bold w-6 text-right">{idx + 1}.</span>
-                      <span className="font-bold text-lg">{workout.exerciseName}</span>
-                    </div>
-                    <div className="text-muted cursor-grab active:cursor-grabbing p-2"><GripVertical size={20}/></div>
-                  </Reorder.Item>
-                ))}
-              </Reorder.Group>
-            ) : (
-              <div className="space-y-4">
-                {activeDay.exercises.map((workout, idx) => {
-                  const isCollapsed = collapsedCards[workout.id];
-                  return (
-                    <div key={workout.id} className="bg-surface border border-border rounded-[32px] overflow-hidden shadow-soft flex flex-col relative z-0">
-                      
+            <Reorder.Group
+              axis="y"
+              values={activeDay.exercises}
+              onReorder={updateExercisesList}
+              className="space-y-3"
+              style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+            >
+              {activeDay.exercises.map((workout, idx) => {
+                const isCollapsed = collapsedCards[workout.id];
+                const forceCollapsed = isReorderMode;
+                const isDragging = draggedWorkoutId === workout.id;
+                return (
+                  <Reorder.Item
+                    key={workout.id}
+                    value={workout}
+                    dragListener={isReorderMode}
+                    onDragStart={() => { setDraggedWorkoutId(workout.id); if (navigator.vibrate) navigator.vibrate(20); }}
+                    onDragEnd={() => setDraggedWorkoutId(null)}
+                    animate={isDragging ? { scale: 1.05, zIndex: 9999, boxShadow: '0 20px 50px rgba(0,0,0,0.7)' } : { scale: 1, zIndex: 0, boxShadow: 'none' }}
+                    transition={{ duration: 0.15 }}
+                    className="relative"
+                    style={{ originX: 0.5, originY: 0.5 }}
+                  >
+                    <motion.div
+                      variants={wiggleVariants}
+                      animate={isReorderMode && !isDragging ? 'animate' : 'idle'}
+                      onPointerDown={() => handleExercisePointerDown(workout.id)}
+                      onPointerUp={handleExercisePointerUp}
+                      onPointerLeave={handleExercisePointerUp}
+                      className={cn(
+                        "bg-surface border rounded-[32px] overflow-hidden shadow-soft flex flex-col relative z-0 transition-colors",
+                        isReorderMode ? "border-dashed border-2 border-white/40 cursor-grab active:cursor-grabbing" : "border-border"
+                      )}
+                    >
                       {/* Header Esercizio */}
-                      <div className="p-5 flex items-start justify-between border-b border-border/50 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => toggleCollapse(workout.id)}>
-                         <div className="flex items-center space-x-3">
-                            <span className="text-muted font-bold w-6 text-right text-lg">{idx + 1}.</span>
-                            <div>
-                              <h3 className="font-bold text-lg leading-tight">{workout.exerciseName}</h3>
-                              {workout.isExpanded && !isCollapsed && (
-                                <span className="text-[10px] font-bold text-accentOrange uppercase tracking-widest bg-accentOrange/10 px-2 py-0.5 inline-block mt-1" style={{ borderRadius: '9999px' }}>Avanzato</span>
+                      <div
+                        className={cn("p-5 flex items-center justify-between border-b border-border/50 bg-white/5 transition-colors", !isReorderMode && "cursor-pointer hover:bg-white/10")}
+                        onClick={() => !isReorderMode && toggleCollapse(workout.id)}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0">
+                          {isReorderMode && <GripVertical size={18} className="text-muted shrink-0" />}
+                          <span className="text-muted font-bold w-6 text-right text-lg shrink-0">{idx + 1}.</span>
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-lg leading-tight truncate">
+                              {workout.exerciseName}
+                              {isReorderMode && (
+                                <span className="text-muted font-normal text-base ml-2">
+                                  ({workout.isExpanded && workout.setDetails ? workout.setDetails.length : (parseInt(workout.sets) || 0)} serie)
+                                </span>
                               )}
-                            </div>
-                         </div>
-                         <div className="flex items-center space-x-2">
-                            <button onClick={(e) => { e.stopPropagation(); removeWorkout(workout.id); }} className="text-muted hover:text-red-400 p-2"><Trash2 size={16}/></button>
-                            <div className="p-2 text-muted">{isCollapsed ? <ChevronDown size={20}/> : <ChevronUp size={20}/>}</div>
-                         </div>
+                            </h3>
+                            {workout.isExpanded && !forceCollapsed && !isCollapsed && (
+                              <span className="text-[10px] font-bold text-accentOrange uppercase tracking-widest bg-accentOrange/10 px-2 py-0.5 inline-block mt-1" style={{ borderRadius: '9999px' }}>Avanzato</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          {!isReorderMode && (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); removeWorkout(workout.id); }} className="text-muted hover:text-red-400 p-2"><Trash2 size={16}/></button>
+                              <div className="p-2 text-muted">{(isCollapsed) ? <ChevronDown size={20}/> : <ChevronUp size={20}/>}</div>
+                            </>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Body */}
-                      {!isCollapsed && (
+                      {/* Body — nascosto in wiggle mode */}
+                      {!forceCollapsed && !isCollapsed && (
                         <div className="p-5">
                           {!workout.isExpanded ? (
                             <div className="flex flex-col space-y-4">
@@ -1355,63 +1448,62 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                             </div>
                           ) : (
                             <div className="flex flex-col space-y-3">
-                               <div className="flex text-[10px] uppercase font-bold text-muted px-2 mb-1">
-                                 <div className="w-8 text-center">Set</div>
-                                 <div className="w-10 text-center">Warm</div>
-                                 <div className="flex-1 text-center">Reps</div>
-                                 <div className="flex-1 text-center">Kg</div>
-                                 <div className="w-8"></div>
-                               </div>
-                               
-                               {workout.setDetails.map((set, sIdx) => (
-                                 <div key={set.id} className={cn("flex items-center space-x-2 p-2 rounded-2xl border transition-colors", set.isWarmup ? "bg-accentOrange/5 border-accentOrange/20" : "bg-black/30 border-border")}>
-                                   <div className="w-8 text-center font-bold text-muted">{sIdx + 1}</div>
-                                   <div className="w-10 flex justify-center">
-                                     <button 
-                                       onClick={() => updateDetailedRow(workout.id, set.id, 'isWarmup', !set.isWarmup)}
-                                       className={cn("w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] transition-colors", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}
-                                     >W</button>
-                                   </div>
-                                   <div className="flex-1">
-                                     <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
-                                   </div>
-                                   <div className="flex-1">
-                                     <div onClick={() => openWeightPicker('Carico (Kg)', set.weight, (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
-                                   </div>
-                                   <div className="w-8 flex justify-center">
-                                     <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
-                                   </div>
-                                 </div>
-                               ))}
-
-                               <div className="flex space-x-2 pt-2">
-                                 <button onClick={() => addDetailedRow(workout.id)} className="flex-1 py-2 text-xs font-bold text-muted bg-white/5 rounded-xl border border-dashed border-border flex justify-center items-center hover:text-white transition-colors">
-                                   <Plus size={14} className="mr-1"/> Nuova Serie
-                                 </button>
-                               </div>
-                               
-                               {/* Extra Tools per Advanced */}
-                               <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
-                                  <div className="relative cursor-pointer" onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
-                                    <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                    <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">
-                                      {workout.restTime ? `${Math.floor(workout.restTime / 60)}m ${workout.restTime % 60}s` : 'Recupero...'}
-                                    </div>
+                              <div className="flex text-[10px] uppercase font-bold text-muted px-2 mb-1">
+                                <div className="w-8 text-center">Set</div>
+                                <div className="w-10 text-center">Warm</div>
+                                <div className="flex-1 text-center">Reps</div>
+                                <div className="flex-1 text-center">Kg</div>
+                                <div className="w-8"></div>
+                              </div>
+                              {workout.setDetails.map((set, sIdx) => (
+                                <div key={set.id} className={cn("flex items-center space-x-2 p-2 rounded-2xl border transition-colors", set.isWarmup ? "bg-accentOrange/5 border-accentOrange/20" : "bg-black/30 border-border")}>
+                                  <div className="w-8 text-center font-bold text-muted">{sIdx + 1}</div>
+                                  <div className="w-10 flex justify-center">
+                                    <button onClick={() => updateDetailedRow(workout.id, set.id, 'isWarmup', !set.isWarmup)} className={cn("w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] transition-colors", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}>W</button>
                                   </div>
-                                  <div className="relative">
-                                    <NotebookPen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                    <input type="text" placeholder="Note tecniche" value={workout.notes || ''} onChange={(e) => updateWorkout(workout.id, {notes: e.target.value})} className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-white/50 transition-colors" />
+                                  <div className="flex-1">
+                                    <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
                                   </div>
-                               </div>
+                                  <div className="flex-1">
+                                    <div onClick={() => openWeightPicker('Carico (Kg)', set.weight, (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
+                                  </div>
+                                  <div className="w-8 flex justify-center">
+                                    <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="flex space-x-2 pt-2">
+                                <button onClick={() => addDetailedRow(workout.id)} className="flex-1 py-2 text-xs font-bold text-muted bg-white/5 rounded-xl border border-dashed border-border flex justify-center items-center hover:text-white transition-colors">
+                                  <Plus size={14} className="mr-1"/> Nuova Serie
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
+                                <div className="relative cursor-pointer" onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
+                                  <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                                  <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">
+                                    {workout.restTime ? `${Math.floor(workout.restTime / 60)}m ${workout.restTime % 60}s` : 'Recupero...'}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => setNotesModalConfig({ isOpen: true, workoutId: workout.id, value: workout.notes || '' })}
+                                  className={cn(
+                                    "relative w-full bg-black/30 border rounded-xl pl-9 pr-3 py-2 text-xs h-9 flex items-center transition-colors hover:border-white/30 active:scale-95",
+                                    workout.notes ? "border-accentOrange/40 text-accentOrange" : "border-border text-muted/60"
+                                  )}
+                                >
+                                  <NotebookPen size={14} className="absolute left-3 top-1/2 -translate-y-1/2" />
+                                  <span className="truncate">{workout.notes || 'Note tecniche...'}</span>
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    </motion.div>
+                  </Reorder.Item>
+                );
+              })}
+            </Reorder.Group>
             
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { PlayCircle, CheckCircle2, Trophy, AlertTriangle, ArrowLeft, Heart, Flame, Dumbbell, PlaySquare, Zap, Pause, Play as PlayIcon } from 'lucide-react';
+import { PlayCircle, CheckCircle2, Trophy, AlertTriangle, ArrowLeft, Heart, Flame, Dumbbell, PlaySquare, Zap, Pause, Play as PlayIcon, NotebookPen, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { cn } from '../App';
@@ -25,6 +25,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [direction, setDirection] = useState(1);
   const [activePicker, setActivePicker] = useState(null);
+  const [isNotesOverlayOpen, setIsNotesOverlayOpen] = useState(false);
   
   // Rientro Intelligente: se il componente viene montato e c'è già una sessione attiva, andiamo in Pausa per chiedere se Riprendere o Interrompere.
   const [isPaused, setIsPaused] = useState(() => activeWorkout !== null);
@@ -499,8 +500,17 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
                 </div>
               )}
 
-              <h3 className="font-bold text-xl md:text-2xl leading-tight mb-4 tracking-tight shrink-0 text-center">
+              <h3 className="font-bold text-xl md:text-2xl leading-tight mb-4 tracking-tight shrink-0 text-center flex items-center justify-center gap-2">
                 {currentExercise.exerciseName}
+                {currentExercise.notes && (
+                  <button
+                    onClick={() => setIsNotesOverlayOpen(true)}
+                    className="text-accentOrange animate-pulse shrink-0"
+                    style={{ lineHeight: 1 }}
+                  >
+                    <NotebookPen size={18} />
+                  </button>
+                )}
               </h3>
 
               {/* Segmented Progress Bar */}
@@ -643,6 +653,43 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
         initialValue={currentSet?.weight}
         onSelect={val => updateSet(currentExercise.id, currentSet.id, 'weight', val)}
       />
+
+      {/* Notes Reading Overlay */}
+      <AnimatePresence>
+        {isNotesOverlayOpen && currentExercise.notes && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center"
+            onClick={() => setIsNotesOverlayOpen(false)}
+          >
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-md bg-[#1c1c1e] border-t border-accentOrange/30 rounded-t-[32px] shadow-[0_-10px_40px_rgba(255,159,10,0.15)] z-10 p-6 pb-10"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 text-accentOrange">
+                  <NotebookPen size={18} />
+                  <span className="font-bold text-sm uppercase tracking-widest">Note Tecniche</span>
+                </div>
+                <button
+                  onClick={() => setIsNotesOverlayOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <p className="text-white text-base leading-relaxed">{currentExercise.notes}</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
