@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Plus, Play, History as HistoryIcon, Home } from 'lucide-react';
+import { Settings, Plus, Play, History as HistoryIcon, Home, Activity, Dumbbell, Clock, Timer, Pause, RefreshCcw, CheckCircle2, ArrowLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import EditorView from './views/EditorView';
@@ -11,6 +11,8 @@ export const cn = (...classes) => classes.filter(Boolean).join(' ');
 export default function App() {
   const [currentTab, setCurrentTab] = useState('editor'); // 'editor', 'active', 'history'
   const [isTabBarHidden, setIsTabBarHidden] = useState(false);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   // Library state per ospitare più schede e i loro giorni
   const [library, setLibrary] = useState(() => {
@@ -22,7 +24,6 @@ export default function App() {
         console.error("Error parsing library", e);
       }
     }
-    // Dati di default V2 (7 slots)
     return [
       {
         id: 'plan-1',
@@ -30,7 +31,7 @@ export default function App() {
         status: 'active',
         days: Array.from({ length: 7 }, (_, i) => ({
            id: `day-${i}`,
-           dayOfWeek: i, // 0 = Sun, 1 = Mon, ..., 6 = Sat
+           dayOfWeek: i,
            exercises: i === 1 ? [
              { id: 'ex-1', exerciseName: 'Panca Piana', sets: 4, reps: 8, weight: 80 }
            ] : []
@@ -63,7 +64,17 @@ export default function App() {
     return [];
   });
 
-  // Salva stato al cambiamento
+  // Global elapsed timer
+  useEffect(() => {
+    let interval;
+    if (activeWorkout && currentTab !== 'history') {
+       interval = setInterval(() => {
+         setElapsed(Math.floor((Date.now() - activeWorkout.startTime) / 1000));
+       }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeWorkout, currentTab]);
+
   useEffect(() => {
     localStorage.setItem('fittrack_ultra_library_v2', JSON.stringify(library));
   }, [library]);
@@ -100,22 +111,12 @@ export default function App() {
             }, 800);
             return 0;
           }
-          
-          const currentSec = Math.ceil(prev);
-          const nextSec = Math.ceil(next);
-          if (nextSec < currentSec && nextSec <= 3 && nextSec >= 1) {
-            if (navigator.vibrate) navigator.vibrate(10);
-          }
-          
-          if (nextSec === 15 && currentSec === 16) {
-            setIsTimerFullscreen(true);
-          }
           return next;
         });
       }, 10);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning]);
+  }, [isTimerRunning, timerLeft]);
 
   const startTimer = (seconds = 90) => {
     setTimerTotal(seconds);
@@ -133,17 +134,46 @@ export default function App() {
 
   const renderActiveSessionBanner = () => {
     if (activeWorkout && currentTab !== 'active') {
+      if (!activeWorkout.exercises || !activeWorkout.exercises[currentExerciseIndex]) return null;
+      const currentEx = activeWorkout.exercises[currentExerciseIndex];
+      const activeSetIdx = currentEx?.sets.findIndex(s => !s.completed);
+      const isTimerReady = isTimerRunning && timerLeft <= 0;
+
       return (
-        <div
-          className="fixed top-0 left-0 right-0 z-50 bg-accentBlue/90 backdrop-blur-md border-b border-white/10 text-white px-4 py-2.5 flex justify-between items-center shadow-lg text-xs font-bold animate-in slide-in-from-top cursor-pointer"
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 50, opacity: 0 }}
           onClick={() => setCurrentTab('active')}
+          className={cn(
+            "fixed bottom-[80px] left-4 right-4 z-40 p-4 rounded-3xl backdrop-blur-xl border flex items-center justify-between shadow-2xl transition-colors",
+            isTimerReady ? "bg-accentOrange border-white/20 animate-pulse" : "bg-surface/90 border-white/10"
+          )}
         >
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
-            <span className="uppercase tracking-widest">Sessione In Pausa</span>
+          <div className="flex items-center space-x-3 overflow-hidden">
+             <div className="w-10 h-10 bg-black/20 rounded-xl flex items-center justify-center shrink-0">
+               <Activity size={20} className={isTimerReady ? "text-white" : "text-accentBlue"} />
+             </div>
+             <div className="flex flex-col truncate">
+               <span className="text-[10px] font-black text-muted uppercase tracking-widest">{currentEx?.exerciseName}</span>
+               <span className="text-xs font-bold text-white italic truncate">
+                 SET {activeSetIdx !== -1 ? activeSetIdx + 1 : currentEx?.sets.length} / {currentEx?.sets.length}
+               </span>
+             </div>
           </div>
-          <span className="uppercase tracking-widest bg-black/20 px-3 py-1 rounded-full">Riprendi &rarr;</span>
-        </div>
+          
+          <div className="flex items-center space-x-4 shrink-0">
+             {isTimerRunning && (
+               <div className="flex flex-col items-end">
+                 <span className="text-xs font-black font-mono text-white tracking-tighter tabular-nums">{Math.ceil(timerLeft)}s</span>
+                 <span className="text-[8px] font-black text-muted uppercase">Recupero</span>
+               </div>
+             )}
+             <div className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest", isTimerReady ? "bg-white text-black shadow-lg" : "bg-accentBlue/20 text-accentBlue")}>
+               {isTimerReady ? "VAI!" : "TORNA"}
+             </div>
+          </div>
+        </motion.div>
       );
     }
     return null;
@@ -151,8 +181,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-accentBlue font-sans">
-
-      {renderActiveSessionBanner()}
 
       <AnimatePresence mode="wait">
         {currentTab === 'editor' && (
@@ -182,6 +210,10 @@ export default function App() {
               timerTotal={timerTotal}
               isTimerFullscreen={isTimerFullscreen}
               setIsTimerFullscreen={setIsTimerFullscreen}
+              elapsed={elapsed}
+              setElapsed={setElapsed}
+              currentExerciseIndex={currentExerciseIndex}
+              setCurrentExerciseIndex={setCurrentExerciseIndex}
             />
           </motion.div>
         )}
@@ -194,97 +226,38 @@ export default function App() {
 
       {/* Global Recupero Timer UI */}
       <AnimatePresence>
-        {isTimerRunning && (
-          <>
-
-
-            <motion.div
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
-              animate={
-                isTimerFullscreen
-                  ? { opacity: 1, y: 0, scale: 1, inset: 0, borderRadius: 0 }
-                  : { opacity: 0, pointerEvents: 'none' } // Hidden when not fullscreen
-              }
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className={cn(
-                "fixed z-50 flex flex-col items-center justify-center cursor-pointer overflow-hidden",
-                isTimerFullscreen ? "inset-0 bg-black/95 backdrop-blur-xl" : "top-4 right-4 bg-surface/90 backdrop-blur-md border border-border/50 shadow-2xl p-1 rounded-full"
-              )}
-              onClick={() => setIsTimerFullscreen(!isTimerFullscreen)}
-            >
-              {isTimerFullscreen ? (
-                <div className="text-center w-full px-6 flex flex-col items-center justify-center h-full">
-                  <AnimatePresence mode="wait">
-                    {timerLeft === 0 ? (
-                      <motion.div
-                        key="via"
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        className="text-[120px] leading-none font-black text-[#34C759] uppercase tracking-widest drop-shadow-[0_0_40px_rgba(52,199,89,0.5)]"
-                      >
-                        VIA!
-                      </motion.div>
-                    ) : Math.ceil(timerLeft) <= 3 ? (
-                      <motion.div
-                        key={`count-${Math.ceil(timerLeft)}`}
-                        initial={{ opacity: 0, scale: 1.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        transition={{ duration: 0.3 }}
-                        className="text-[200px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
-                      >
-                        {Math.ceil(timerLeft)}
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="timer-normal"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="text-[180px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
-                      >
-                        {Math.ceil(timerLeft)}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {timerLeft > 3 && (
-                    <div className="absolute bottom-12 text-muted text-sm font-bold uppercase tracking-widest">
-                      Tap per minimizzare
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center">
-                  {/* SVG Circular Progress Ring with seconds centered */}
-                  <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90">
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="#333" strokeWidth="3" />
-                    <circle
-                      cx="22" cy="22" r="18" fill="none"
-                      stroke="#FF9F0A"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeDasharray={2 * Math.PI * 18}
-                      strokeDashoffset={2 * Math.PI * 18 * (1 - (timerTotal > 0 ? timerLeft / timerTotal : 0))}
-                      style={{ transition: 'stroke-dashoffset 0.01s linear' }}
-                    />
-                  </svg>
-                  <span className="absolute font-bold font-mono text-white tabular-nums text-xs">{Math.ceil(timerLeft)}</span>
-                </div>
-              )}
-            </motion.div>
-          </>
+        {isTimerRunning && isTimerFullscreen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6"
+            onClick={() => setIsTimerFullscreen(false)}
+          >
+            <div className="text-center">
+              <AnimatePresence mode="wait">
+                {timerLeft <= 0 ? (
+                  <motion.div key="via" initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="text-9xl font-black text-[#34C759] uppercase italic tracking-widest">VIA!</motion.div>
+                ) : (
+                  <motion.div key="count" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[180px] font-bold font-mono text-white tabular-nums tracking-tighter">
+                    {Math.ceil(timerLeft)}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <div className="mt-8 text-muted text-sm font-bold uppercase tracking-widest italic">Recupero Muscolare</div>
+              <div className="mt-4 text-xs text-muted/40 uppercase tracking-[0.3em]">Tocca per minimizzare</div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
+
+      {renderActiveSessionBanner()}
 
       {/* Bottom Navigation */}
       <AnimatePresence>
         {!isTabBarHidden && (
           <motion.nav
-            initial={{ y: 100 }}
-            animate={{ y: 0 }}
-            exit={{ y: 100 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
             className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl border-t border-border/50 pb-6 pt-2 px-6 z-40"
           >
             <div className="flex justify-between items-center max-w-sm mx-auto relative">
@@ -292,14 +265,12 @@ export default function App() {
                 <Home size={24} className="mb-1" />
                 <span className="text-[10px] font-bold tracking-wider uppercase">Libreria</span>
               </button>
-
               <button
                 onClick={() => setCurrentTab('active')}
                 className="absolute left-1/2 -translate-x-1/2 -top-6 w-16 h-16 bg-accentBlue rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(10,132,255,0.4)] text-white hover:scale-105 transition-transform active:scale-95"
               >
                 <Play size={28} className="ml-1" />
               </button>
-
               <button onClick={() => setCurrentTab('history')} className={cn("flex flex-col items-center p-2 transition-colors", currentTab === 'history' ? 'text-white' : 'text-muted hover:text-white/70')}>
                 <HistoryIcon size={24} className="mb-1" />
                 <span className="text-[10px] font-bold tracking-wider uppercase">Storico</span>
@@ -308,8 +279,6 @@ export default function App() {
           </motion.nav>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
-
