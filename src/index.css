@@ -2,6 +2,11 @@
 @config "../tailwind.config.js";
 
 @layer base {
+  html, body {
+    touch-action: manipulation;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-black text-white antialiased selection:bg-accentBlue selection:text-white;
   }

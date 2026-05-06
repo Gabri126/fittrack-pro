@@ -82,7 +82,8 @@ export default function App() {
 
   // Global Timer Logic
   const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [timerLeft, setTimerLeft] = useState(0); // 90 secondi default
+  const [timerLeft, setTimerLeft] = useState(0);
+  const [timerTotal, setTimerTotal] = useState(0);
   const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
 
   useEffect(() => {
@@ -90,15 +91,23 @@ export default function App() {
     if (isTimerRunning && timerLeft > 0) {
       interval = setInterval(() => {
         setTimerLeft(prev => {
-          if (prev <= 1) {
-            setIsTimerRunning(false);
-            setIsTimerFullscreen(false);
+          const next = prev - 1;
+          if (next <= 0) {
+            // VIA! moment
+            if (navigator.vibrate) navigator.vibrate(50);
+            setTimeout(() => {
+              setIsTimerRunning(false);
+              setIsTimerFullscreen(false);
+            }, 800);
             return 0;
           }
-          if (prev === 16) {
+          if (next <= 3 && next >= 1) {
+            if (navigator.vibrate) navigator.vibrate(10);
+          }
+          if (next === 15) {
             setIsTimerFullscreen(true);
           }
-          return prev - 1;
+          return next;
         });
       }, 1000);
     }
@@ -106,6 +115,7 @@ export default function App() {
   }, [isTimerRunning, timerLeft]);
 
   const startTimer = (seconds = 90) => {
+    setTimerTotal(seconds);
     setTimerLeft(seconds);
     setIsTimerRunning(true);
     setIsTimerFullscreen(true);
@@ -114,6 +124,7 @@ export default function App() {
   const resetTimer = () => {
     setIsTimerRunning(false);
     setTimerLeft(0);
+    setTimerTotal(0);
     setIsTimerFullscreen(false);
   };
 
@@ -176,41 +187,97 @@ export default function App() {
       {/* Global Recupero Timer UI */}
       <AnimatePresence>
         {isTimerRunning && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={
-              isTimerFullscreen
-                ? { opacity: 1, y: 0, scale: 1, inset: 0, borderRadius: 0 }
-                : { opacity: 1, y: 16, x: -16, scale: 1, top: 16, right: 16, bottom: 'auto', left: 'auto', width: 'auto', height: 'auto', borderRadius: 9999 }
-            }
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className={cn(
-              "fixed z-50 flex flex-col items-center justify-center cursor-pointer overflow-hidden",
-              isTimerFullscreen ? "inset-0 bg-black/95 backdrop-blur-xl" : "top-4 right-4 bg-surface/90 backdrop-blur-md border border-border/50 shadow-2xl px-4 py-2 rounded-full flex-row"
-            )}
-            onClick={() => setIsTimerFullscreen(!isTimerFullscreen)}
-          >
-            {isTimerFullscreen ? (
-              <div className="text-center w-full px-6 transition-colors duration-500 flex flex-col items-center justify-center h-full">
-                <div className={cn("text-[180px] leading-none font-bold font-mono tracking-tighter tabular-nums", timerLeft <= 3 ? "text-[#34C759]" : "text-white")}>
-                  {timerLeft}
+          <>
+            {/* Top-Edge Progress Bar */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed top-0 left-0 right-0 z-[60] h-[2px] bg-white/10"
+            >
+              <motion.div
+                className="h-full bg-accentOrange shadow-[0_0_8px_rgba(255,159,10,0.6)]"
+                style={{ width: timerTotal > 0 ? `${(timerLeft / timerTotal) * 100}%` : '0%' }}
+                transition={{ duration: 0.3, ease: 'linear' }}
+              />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={
+                isTimerFullscreen
+                  ? { opacity: 1, y: 0, scale: 1, inset: 0, borderRadius: 0 }
+                  : { opacity: 1, y: 16, x: -16, scale: 1, top: 16, right: 16, bottom: 'auto', left: 'auto', width: 'auto', height: 'auto', borderRadius: 9999 }
+              }
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className={cn(
+                "fixed z-50 flex flex-col items-center justify-center cursor-pointer overflow-hidden",
+                isTimerFullscreen ? "inset-0 bg-black/95 backdrop-blur-xl" : "top-4 right-4 bg-surface/90 backdrop-blur-md border border-border/50 shadow-2xl p-1 rounded-full"
+              )}
+              onClick={() => setIsTimerFullscreen(!isTimerFullscreen)}
+            >
+              {isTimerFullscreen ? (
+                <div className="text-center w-full px-6 flex flex-col items-center justify-center h-full">
+                  <AnimatePresence mode="wait">
+                    {timerLeft === 0 ? (
+                      <motion.div
+                        key="via"
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="text-[120px] leading-none font-black text-[#34C759] uppercase tracking-widest drop-shadow-[0_0_40px_rgba(52,199,89,0.5)]"
+                      >
+                        VIA!
+                      </motion.div>
+                    ) : timerLeft <= 3 ? (
+                      <motion.div
+                        key={`count-${timerLeft}`}
+                        initial={{ opacity: 0, scale: 1.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.3 }}
+                        className="text-[200px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
+                      >
+                        {timerLeft}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="timer-normal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="text-[180px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
+                      >
+                        {timerLeft}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {timerLeft > 3 && (
+                    <div className="absolute bottom-12 text-muted text-sm font-bold uppercase tracking-widest">
+                      Tap per minimizzare
+                    </div>
+                  )}
                 </div>
-                {timerLeft <= 3 && (
-                  <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-5xl font-black text-[#34C759] mt-4 uppercase tracking-widest">
-                    Via!
-                  </motion.div>
-                )}
-                <div className="absolute bottom-12 text-muted text-sm font-bold uppercase tracking-widest">
-                  Tap per minimizzare
+              ) : (
+                <div className="flex items-center justify-center">
+                  {/* SVG Circular Progress Ring with seconds centered */}
+                  <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#333" strokeWidth="3" />
+                    <circle
+                      cx="22" cy="22" r="18" fill="none"
+                      stroke="#FF9F0A"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 18}
+                      strokeDashoffset={2 * Math.PI * 18 * (1 - (timerTotal > 0 ? timerLeft / timerTotal : 0))}
+                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                    />
+                  </svg>
+                  <span className="absolute font-bold font-mono text-white tabular-nums text-xs">{timerLeft}</span>
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 rounded-full bg-accentOrange animate-pulse" />
-                <span className="font-bold font-mono text-white tabular-nums">{timerLeft}s</span>
-              </div>
-            )}
-          </motion.div>
+              )}
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

@@ -234,7 +234,8 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
         });
       }
 
-      startTimer();
+      const exRestTime = prev.exercises.find(e => e.id === exId)?.restTime;
+      startTimer(exRestTime && exRestTime > 0 ? exRestTime : 90);
       return { ...prev, exercises: newEx };
     });
   };
@@ -302,15 +303,21 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
   if (!activeWorkout) {
     const selectedDayData = activePlan.days.find(d => d.dayOfWeek === selectedDayIndex);
     const hasExercises = selectedDayData && selectedDayData.exercises.length > 0;
+    const isRestDay = !hasExercises;
+
+    // Find last unexecuted programmed day for "Recupera Sessione"
+    const executedDayIds = new Set(history.map(s => s.dayId));
+    const lastUnexecutedDay = [...activePlan.days].reverse().find(d => d.exercises.length > 0 && !executedDayIds.has(d.id));
 
     return (
       <div className="p-4 flex flex-col items-center justify-center min-h-[100dvh] pb-32 space-y-8">
-        <div className="w-24 h-24 bg-accentOrange/10 rounded-full flex items-center justify-center border border-accentOrange/20 shadow-[0_0_30px_rgba(255,159,10,0.2)]">
-          <PlayCircle size={48} className="text-accentOrange ml-2" />
+        <div className={cn("w-24 h-24 rounded-full flex items-center justify-center border shadow-[0_0_30px]", isRestDay ? "bg-accentBlue/10 border-accentBlue/20 shadow-accentBlue/20" : "bg-accentOrange/10 border-accentOrange/20 shadow-accentOrange/20")}>
+          <PlayCircle size={48} className={cn("ml-2", isRestDay ? "text-accentBlue" : "text-accentOrange")} />
         </div>
         <div className="text-center">
-          <h2 className="text-3xl font-bold mb-2">Pronto ad allenarti?</h2>
+          <h2 className="text-3xl font-bold mb-2">{isRestDay ? 'Giorno di Riposo' : 'Pronto ad allenarti?'}</h2>
           <p className="text-muted">Scheda: <strong className="text-white">{activePlan.name}</strong></p>
+          {isRestDay && <p className="text-muted text-sm mt-1">Oggi non hai esercizi programmati</p>}
         </div>
         
         <div className="flex space-x-2 overflow-x-auto max-w-full pb-2 hide-scrollbar w-full justify-start md:justify-center px-4">
@@ -328,13 +335,37 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
           })}
         </div>
 
-        <button 
-          onClick={startWorkout}
-          disabled={!hasExercises}
-          className="w-full max-w-sm bg-gradient-to-r from-accentOrange to-orange-500 text-white font-bold text-lg rounded-3xl py-4 shadow-[0_0_20px_rgba(255,159,10,0.4)] disabled:opacity-50 disabled:shadow-none hover:opacity-90 transition-opacity active:scale-[0.98]"
-        >
-          {hasExercises ? "Inizia Allenamento" : "Nessun esercizio previsto"}
-        </button>
+        {isRestDay ? (
+          <div className="w-full max-w-sm space-y-3">
+            <button 
+              onClick={() => {
+                // Start extra workout: pick a different day or just start fresh
+                const firstDayWithExercises = activePlan.days.find(d => d.exercises.length > 0);
+                if (firstDayWithExercises) {
+                  setSelectedDayIndex(firstDayWithExercises.dayOfWeek);
+                }
+              }}
+              className="w-full bg-white/10 border border-white/20 text-white font-bold text-base rounded-2xl py-4 hover:bg-white/20 transition-colors active:scale-[0.98] flex items-center justify-center space-x-2"
+            >
+              <Dumbbell size={20} /><span>Allenamento Extra</span>
+            </button>
+            {lastUnexecutedDay && (
+              <button 
+                onClick={() => setSelectedDayIndex(lastUnexecutedDay.dayOfWeek)}
+                className="w-full bg-accentBlue/10 border border-accentBlue/30 text-accentBlue font-bold text-base rounded-2xl py-4 hover:bg-accentBlue/20 transition-colors active:scale-[0.98] flex items-center justify-center space-x-2"
+              >
+                <PlayCircle size={20} /><span>Recupera Sessione ({DAY_NAMES[lastUnexecutedDay.dayOfWeek]})</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <button 
+            onClick={startWorkout}
+            className="w-full max-w-sm bg-gradient-to-r from-accentOrange to-orange-500 text-white font-bold text-lg rounded-3xl py-4 shadow-[0_0_20px_rgba(255,159,10,0.4)] hover:opacity-90 transition-opacity active:scale-[0.98]"
+          >
+            Inizia Allenamento
+          </button>
+        )}
       </div>
     );
   }
@@ -604,36 +635,49 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
         </AnimatePresence>
       </div>
 
-      {/* Overlay Pausa con Scelta (Rientro Intelligente) */}
+      {/* Overlay Pausa — Bottom Sheet Design */}
       <AnimatePresence>
         {isPaused && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center pb-32"
-          >
-            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-              <Pause size={48} className="text-white" />
-            </div>
-            <h2 className="text-3xl font-bold tracking-tight mb-2 uppercase text-center px-4">Sessione Sospesa</h2>
-            <p className="text-muted mb-12 text-center max-w-xs">Vuoi riprendere da dove avevi lasciato o terminare l'allenamento?</p>
-            
-            <div className="flex flex-col space-y-4 w-full px-10 max-w-[320px]">
-              <button 
-                onClick={() => setIsPaused(false)}
-                className="w-full py-4 rounded-full bg-white text-black font-bold uppercase tracking-widest text-lg shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center space-x-2"
-              >
-                <PlayIcon size={20} className="fill-black" />
-                <span>Riprendi</span>
-              </button>
-              
-              <button 
-                onClick={handleStopWorkout}
-                className="w-full py-4 rounded-full bg-transparent border border-red-500/50 text-red-500 font-bold uppercase tracking-widest text-sm hover:bg-red-500/10 active:scale-95 transition-all flex items-center justify-center"
-              >
-                Interrompi e Salva
-              </button>
-            </div>
-          </motion.div>
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsPaused(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-50 bg-[#1c1c1e] border-t border-white/10 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] px-8 pt-4 pb-12"
+            >
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+              <div className="flex items-center justify-center space-x-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                  <Pause size={20} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Sessione Sospesa</h3>
+                  <p className="text-muted text-xs">{formatElapsed(elapsed)} trascorsi</p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => setIsPaused(false)}
+                  className="flex-1 py-4 rounded-2xl bg-white text-black font-bold text-base shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-2"
+                >
+                  <PlayIcon size={18} className="fill-black" />
+                  <span>Riprendi</span>
+                </button>
+                <button 
+                  onClick={handleStopWorkout}
+                  className="flex-1 py-4 rounded-2xl bg-transparent border border-red-500/40 text-red-400 font-bold text-sm hover:bg-red-500/10 active:scale-95 transition-all flex items-center justify-center"
+                >
+                  Termina
+                </button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

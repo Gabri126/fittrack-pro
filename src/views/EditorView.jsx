@@ -17,24 +17,60 @@ const HONEYCOMB_LAYOUT = [
 const AVAILABLE_TAGS = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body', 'Petto', 'Dorso', 'Gambe', 'Spalle', 'Braccia', 'Core'];
 
 const EXERCISE_DB = [
+  // Petto
   { id: 'db-1', name: 'Panca Piana Bilanciere', tags: ['Push', 'Upper', 'Petto'] },
   { id: 'db-2', name: 'Croci Manubri Panca Piana', tags: ['Push', 'Upper', 'Petto'] },
   { id: 'db-3', name: 'Panca Inclinata Manubri', tags: ['Push', 'Upper', 'Petto'] },
+  { id: 'db-19', name: 'Panca Piana Manubri', tags: ['Push', 'Upper', 'Petto'] },
+  { id: 'db-20', name: 'Panca Declinata Bilanciere', tags: ['Push', 'Upper', 'Petto'] },
+  { id: 'db-21', name: 'Chest Press', tags: ['Push', 'Upper', 'Petto'] },
+  { id: 'db-22', name: 'Croci ai Cavi', tags: ['Push', 'Upper', 'Petto'] },
+  { id: 'db-23', name: 'Dip alle Parallele', tags: ['Push', 'Upper', 'Petto', 'Braccia'] },
+  { id: 'db-24', name: 'Panca Inclinata Bilanciere', tags: ['Push', 'Upper', 'Petto'] },
+  // Dorso
   { id: 'db-4', name: 'Trazioni Sbarra', tags: ['Pull', 'Upper', 'Dorso'] },
   { id: 'db-5', name: 'Rematore Bilanciere', tags: ['Pull', 'Upper', 'Dorso'] },
   { id: 'db-6', name: 'Lat Machine', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-25', name: 'Rematore Manubrio', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-26', name: 'Pulley Basso', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-27', name: 'Pulldown Cavo Alto', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-28', name: 'T-Bar Row', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-29', name: 'Seal Row', tags: ['Pull', 'Upper', 'Dorso'] },
+  { id: 'db-30', name: 'Face Pull', tags: ['Pull', 'Upper', 'Dorso', 'Spalle'] },
+  // Spalle
   { id: 'db-7', name: 'Military Press', tags: ['Push', 'Upper', 'Spalle'] },
   { id: 'db-8', name: 'Alzate Laterali', tags: ['Push', 'Upper', 'Spalle'] },
+  { id: 'db-31', name: 'Lento Avanti Manubri', tags: ['Push', 'Upper', 'Spalle'] },
+  { id: 'db-32', name: 'Arnold Press', tags: ['Push', 'Upper', 'Spalle'] },
+  { id: 'db-33', name: 'Alzate Laterali ai Cavi', tags: ['Push', 'Upper', 'Spalle'] },
+  { id: 'db-34', name: 'Alzate Posteriori', tags: ['Pull', 'Upper', 'Spalle'] },
+  { id: 'db-35', name: 'Shoulder Press Macchina', tags: ['Push', 'Upper', 'Spalle'] },
+  // Braccia
   { id: 'db-9', name: 'Curl Bilanciere', tags: ['Pull', 'Upper', 'Braccia'] },
   { id: 'db-10', name: 'Pushdown Tricipiti', tags: ['Push', 'Upper', 'Braccia'] },
+  { id: 'db-36', name: 'Curl Manubri Alternato', tags: ['Pull', 'Upper', 'Braccia'] },
+  { id: 'db-37', name: 'Curl Martello', tags: ['Pull', 'Upper', 'Braccia'] },
+  { id: 'db-38', name: 'French Press', tags: ['Push', 'Upper', 'Braccia'] },
+  { id: 'db-39', name: 'Kick Back Tricipiti', tags: ['Push', 'Upper', 'Braccia'] },
+  { id: 'db-40', name: 'Curl ai Cavi', tags: ['Pull', 'Upper', 'Braccia'] },
+  { id: 'db-41', name: 'Curl Panca Scott', tags: ['Pull', 'Upper', 'Braccia'] },
+  // Gambe
   { id: 'db-11', name: 'Squat', tags: ['Legs', 'Lower', 'Gambe'] },
   { id: 'db-12', name: 'Leg Press', tags: ['Legs', 'Lower', 'Gambe'] },
   { id: 'db-13', name: 'Stacchi da Terra', tags: ['Pull', 'Lower', 'Gambe', 'Dorso'] },
   { id: 'db-14', name: 'Leg Extension', tags: ['Legs', 'Lower', 'Gambe'] },
   { id: 'db-15', name: 'Leg Curl', tags: ['Legs', 'Lower', 'Gambe'] },
+  { id: 'db-42', name: 'Affondi Manubri', tags: ['Legs', 'Lower', 'Gambe'] },
+  { id: 'db-43', name: 'Bulgarian Split Squat', tags: ['Legs', 'Lower', 'Gambe'] },
+  { id: 'db-44', name: 'Stacco Rumeno', tags: ['Pull', 'Lower', 'Gambe'] },
+  { id: 'db-45', name: 'Hip Thrust', tags: ['Legs', 'Lower', 'Gambe'] },
+  { id: 'db-46', name: 'Calf Raise', tags: ['Legs', 'Lower', 'Gambe'] },
+  { id: 'db-47', name: 'Hack Squat', tags: ['Legs', 'Lower', 'Gambe'] },
+  // Core & Full Body
   { id: 'db-16', name: 'Plank', tags: ['Core'] },
   { id: 'db-17', name: 'Crunch', tags: ['Core'] },
   { id: 'db-18', name: 'Burpees', tags: ['Full Body'] },
+  { id: 'db-48', name: 'Ab Wheel Rollout', tags: ['Core'] },
 ];
 
 const WIZARD_SPLITS = {
