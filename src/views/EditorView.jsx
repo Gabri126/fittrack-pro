@@ -130,6 +130,35 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   const [dayToTag, setDayToTag] = useState(null);
 
   const [isBinOverlayOpen, setIsBinOverlayOpen] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleVisionParsing = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (navigator.vibrate) navigator.vibrate(50);
+    
+    // Simulate Vision processing
+    setTimeout(() => {
+      const mockExtracted = [
+        { id: `v-${Date.now()}-1`, exerciseName: "Panca Piana", sets: 3, reps: 10, weight: 60 },
+        { id: `v-${Date.now()}-2`, exerciseName: "Squat", sets: 4, reps: 8, weight: 100 },
+        { id: `v-${Date.now()}-3`, exerciseName: "Croci ai Cavi", sets: 3, reps: 12, weight: 15 },
+      ];
+
+      if (selectedPlanId) {
+        setLibrary(prev => prev.map(p => {
+          if (p.id !== selectedPlanId) return p;
+          return { ...p, unassigned: [...(p.unassigned || []), ...mockExtracted] };
+        }));
+        setIsBinOverlayOpen(true);
+      } else {
+        createEmptyPlan("Scheda Vision", null, mockExtracted);
+      }
+      
+      if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+    }, 1200);
+  };
 
   // Focus & Picker States
   const [pickerConfig, setPickerConfig] = useState({ isOpen: false, type: 'single' });
@@ -147,6 +176,11 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   // Wiggle Mode States (Exercises)
   const [draggedWorkoutId, setDraggedWorkoutId] = useState(null);
   const exercisePressTimer = useRef(null);
+
+  // Focus Overlay States
+  const [isExerciseFocusMode, setIsExerciseFocusMode] = useState(false);
+  const [isSetFocusMode, setIsSetFocusMode] = useState(false);
+  const [focusExerciseId, setFocusExerciseId] = useState(null);
 
   // -- HELPERS --
   const activePlan = library.find(p => p.id === selectedPlanId);
@@ -490,12 +524,18 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
   const toggleCollapse = (id) => setCollapsedCards(p => ({...p, [id]: !p[id]}));
 
   const handleExercisePointerDown = (workoutId) => {
-    if (!isReorderMode) {
-      exercisePressTimer.current = setTimeout(() => {
-        setIsReorderMode(true);
-        if (navigator.vibrate) navigator.vibrate(20);
-      }, 500);
-    }
+    exercisePressTimer.current = setTimeout(() => {
+      setIsExerciseFocusMode(true);
+      if (navigator.vibrate) navigator.vibrate(20);
+    }, 500);
+  };
+
+  const handleSetPointerDown = (workoutId) => {
+    exercisePressTimer.current = setTimeout(() => {
+      setFocusExerciseId(workoutId);
+      setIsSetFocusMode(true);
+      if (navigator.vibrate) navigator.vibrate(20);
+    }, 500);
   };
 
   const handleExercisePointerUp = () => {
@@ -540,7 +580,7 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     if (!isWiggleMode) {
       pressTimer.current = setTimeout(() => {
         setIsWiggleMode(true);
-        if (navigator.vibrate) navigator.vibrate(50);
+        if (navigator.vibrate) navigator.vibrate(20);
       }, 500);
     }
   };
@@ -683,6 +723,13 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                   >
                     Estrai & Importa
                   </button>
+                  <input type="file" ref={fileInputRef} onChange={handleVisionParsing} accept="image/*" className="hidden" />
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-14 h-14 rounded-full bg-accentBlue/20 border border-accentBlue/40 flex items-center justify-center shrink-0 text-accentBlue hover:bg-accentBlue/30 transition-all"
+                  >
+                    <Camera size={20} />
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -791,8 +838,10 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                       <div className="w-8 h-8 rounded-full bg-green-500 shadow-[0_0_15px_rgba(52,199,89,0.5)] flex items-center justify-center">
                         <CheckCircle2 size={16} className="text-black" />
                       </div>
-                    ) : (!data.isPast && data.isScheduled) ? (
-                      <div className="w-8 h-8 rounded-full border-2 border-dashed border-accentOrange flex items-center justify-center bg-accentOrange/10">
+                    ) : (data.isScheduled && !data.isPast) ? (
+                      <div className={cn(
+                        "w-8 h-8 rounded-full border-2 border-dashed border-accentOrange bg-accentOrange/10 shadow-[0_0_10px_rgba(255,159,10,0.2)] flex items-center justify-center"
+                      )}>
                         <span className="text-sm font-bold text-accentOrange">{data.dayNum}</span>
                       </div>
                     ) : (
@@ -1293,9 +1342,13 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
 
                {inputMode === 'ai' && (
                   <div className="space-y-4">
-                    <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder="Incolla qui la tua scheda..." className="w-full bg-black/50 border border-border rounded-3xl px-5 py-5 text-sm focus:outline-none min-h-[140px] resize-none" />
-                    <button onClick={handleDraftAi} className="w-full bg-accentOrange text-white font-semibold rounded-3xl py-4 flex items-center justify-center space-x-2"><BrainCircuit size={18} /><span>Genera Bozza</span></button>
-                  </div>
+                     <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder="Incolla qui la tua scheda..." className="w-full bg-black/50 border border-border rounded-3xl px-5 py-5 text-sm focus:outline-none min-h-[140px] resize-none" />
+                     <div className="flex space-x-3">
+                       <button onClick={handleDraftAi} className="flex-1 bg-accentOrange text-white font-semibold rounded-3xl py-4 flex items-center justify-center space-x-2"><BrainCircuit size={18} /><span>Genera Bozza</span></button>
+                       <input type="file" ref={fileInputRef} onChange={handleVisionParsing} accept="image/*" className="hidden" />
+                       <button onClick={() => fileInputRef.current?.click()} className="w-14 bg-white/5 border border-border rounded-3xl flex items-center justify-center text-white hover:bg-white/10 transition-all"><Camera size={20}/></button>
+                     </div>
+                   </div>
                )}
             </div>
           </section>
@@ -1411,17 +1464,15 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                     dragListener={isReorderMode}
                     onDragStart={() => { setDraggedWorkoutId(workout.id); if (navigator.vibrate) navigator.vibrate(20); }}
                     onDragEnd={() => setDraggedWorkoutId(null)}
-                    animate={isDragging ? { scale: 1.05, zIndex: 9999, boxShadow: '0 20px 50px rgba(0,0,0,0.7)' } : { scale: 1, zIndex: 0, boxShadow: 'none' }}
-                    transition={{ duration: 0.15 }}
+                    whileDrag={{ scale: 1.05, zIndex: 9999, transition: { duration: 0 } }}
+                    animate={{ scale: 1, zIndex: 0 }}
+                    transition={{ type: 'spring', stiffness: 800, damping: 40, mass: 0.5 }}
                     className="relative"
                     style={{ originX: 0.5, originY: 0.5 }}
                   >
                     <motion.div
                       variants={wiggleVariants}
                       animate={isReorderMode && !isDragging ? 'animate' : 'idle'}
-                      onPointerDown={() => handleExercisePointerDown(workout.id)}
-                      onPointerUp={handleExercisePointerUp}
-                      onPointerLeave={handleExercisePointerUp}
                       className={cn(
                         "bg-surface border rounded-[32px] overflow-hidden shadow-soft flex flex-col relative z-0 transition-colors",
                         isReorderMode ? "border-dashed border-2 border-white/40 cursor-grab active:cursor-grabbing" : "border-border"
@@ -1431,6 +1482,10 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                       <div
                         className={cn("p-5 flex items-center justify-between border-b border-border/50 bg-white/5 transition-colors", !isReorderMode && "cursor-pointer hover:bg-white/10")}
                         onClick={() => !isReorderMode && toggleCollapse(workout.id)}
+                        onPointerDown={(e) => { e.stopPropagation(); handleExercisePointerDown(workout.id); }}
+                        onPointerUp={handleExercisePointerUp}
+                        onPointerMove={handleExercisePointerUp}
+                        onPointerLeave={handleExercisePointerUp}
                       >
                         <div className="flex items-center space-x-3 min-w-0">
                           {isReorderMode && <GripVertical size={18} className="text-muted shrink-0" />}
@@ -1465,25 +1520,31 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                           {!workout.isExpanded ? (
                             <div className="flex flex-col space-y-4">
                               <div className="grid grid-cols-3 gap-2">
-                                <div className="relative">
+                                <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Set</span>
                                   <div onClick={() => openSinglePicker('Set', SETS_OPTIONS, workout.sets || 3, '', (val) => updateWorkout(workout.id, {sets: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.sets || 3}</div>
                                 </div>
-                                <div className="relative">
+                                <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Rep</span>
                                   <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, workout.reps || 10, '', (val) => updateWorkout(workout.id, {reps: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-10 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.reps || 10}</div>
                                 </div>
-                                <div className="relative">
+                                <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
                                   <span className="absolute left-3 top-3 text-[10px] text-muted font-bold uppercase pointer-events-none">Kg</span>
                                   <div onClick={() => openWeightPicker('Carico (Kg)', workout.weight || 0, (val) => updateWorkout(workout.id, {weight: val}))} className="w-full bg-black/50 border border-border rounded-2xl pl-8 pr-2 py-3 text-sm focus:outline-none hover:border-accentOrange font-mono cursor-pointer flex items-center h-12 transition-colors">{workout.weight || 0}</div>
                                 </div>
                               </div>
-                              <button onClick={() => expandToAdvanced(workout.id)} className="w-full py-2.5 text-xs font-bold text-accentBlue bg-accentBlue/10 rounded-2xl flex justify-center items-center hover:bg-accentBlue/20 transition-colors">
+                              <button onClick={(e) => { e.stopPropagation(); expandToAdvanced(workout.id); }} onPointerDown={(e) => e.stopPropagation()} className="w-full py-2.5 text-xs font-bold text-accentBlue bg-accentBlue/10 rounded-2xl flex justify-center items-center hover:bg-accentBlue/20 transition-colors">
                                 <Settings2 size={14} className="mr-2"/> Dettaglio Serie Singole
                               </button>
                             </div>
                           ) : (
-                            <div className="flex flex-col space-y-3">
+                            <div 
+                              className="flex flex-col space-y-3 p-2 rounded-3xl"
+                              onPointerDown={(e) => { e.stopPropagation(); handleSetPointerDown(workout.id); }}
+                              onPointerUp={handleExercisePointerUp}
+                              onPointerMove={handleExercisePointerUp}
+                              onPointerLeave={handleExercisePointerUp}
+                            >
                               <div className="flex text-[10px] uppercase font-bold text-muted px-2 mb-1">
                                 <div className="w-8 text-center">Set</div>
                                 <div className="w-10 text-center">Warm</div>
@@ -1494,16 +1555,16 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                               {workout.setDetails.map((set, sIdx) => (
                                 <div key={set.id} className={cn("flex items-center space-x-2 p-2 rounded-2xl border transition-colors", set.isWarmup ? "bg-accentOrange/5 border-accentOrange/20" : "bg-black/30 border-border")}>
                                   <div className="w-8 text-center font-bold text-muted">{sIdx + 1}</div>
-                                  <div className="w-10 flex justify-center">
+                                  <div className="w-10 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
                                     <button onClick={() => updateDetailedRow(workout.id, set.id, 'isWarmup', !set.isWarmup)} className={cn("w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] transition-colors", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}>W</button>
                                   </div>
-                                  <div className="flex-1">
+                                  <div className="flex-1" onPointerDown={(e) => e.stopPropagation()}>
                                     <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
                                   </div>
-                                  <div className="flex-1">
+                                  <div className="flex-1" onPointerDown={(e) => e.stopPropagation()}>
                                     <div onClick={() => openWeightPicker('Carico (Kg)', set.weight, (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
                                   </div>
-                                  <div className="w-8 flex justify-center">
+                                  <div className="w-8 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
                                     <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
                                   </div>
                                 </div>
@@ -1514,13 +1575,14 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                                 </button>
                               </div>
                               <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
-                                <div className="relative cursor-pointer" onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
+                                <div className="relative cursor-pointer" onPointerDown={(e) => e.stopPropagation()} onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
                                   <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                                   <div className="w-full bg-black/30 border border-border rounded-xl pl-9 pr-3 py-2 text-xs hover:border-white/50 transition-colors flex items-center h-9 text-muted/80">
                                     {workout.restTime ? `${Math.floor(workout.restTime / 60)}m ${workout.restTime % 60}s` : 'Recupero...'}
                                   </div>
                                 </div>
                                 <button
+                                  onPointerDown={(e) => e.stopPropagation()}
                                   onClick={() => setNotesModalConfig({ isOpen: true, workoutId: workout.id, value: workout.notes || '' })}
                                   className={cn(
                                     "relative w-full bg-black/30 border rounded-xl pl-9 pr-3 py-2 text-xs h-9 flex items-center transition-colors hover:border-white/30 active:scale-95",
@@ -1552,6 +1614,145 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
           )}
         </div>
       )}
+
+      {/* EXERCISE FOCUS MODE OVERLAY */}
+      <AnimatePresence>
+        {isExerciseFocusMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col p-6 touch-none"
+          >
+            <div className="flex flex-col space-y-2 mb-8">
+              <h2 className="text-2xl font-bold tracking-tight">Ordina Esercizi</h2>
+              <p className="text-muted text-sm">Trascina per cambiare l'ordine cronologico</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto hide-scrollbar pb-32">
+              <Reorder.Group
+                axis="y"
+                values={activeDay.exercises}
+                onReorder={(newList) => {
+                  if (JSON.stringify(newList) !== JSON.stringify(activeDay.exercises)) {
+                    if (navigator.vibrate) navigator.vibrate(20);
+                  }
+                  updateExercisesList(newList);
+                }}
+                className="space-y-4"
+              >
+                {activeDay.exercises.map((workout, idx) => (
+                  <Reorder.Item
+                    key={workout.id}
+                    value={workout}
+                    whileDrag={{ scale: 1.05, zIndex: 9999 }}
+                    animate={{ scale: 1, zIndex: 0 }}
+                    transition={{ duration: 0 }}
+                    className="relative"
+                  >
+                    <div className="bg-surface border-2 border-dashed border-white/40 rounded-[28px] p-5 flex items-center space-x-4">
+                      <GripVertical size={20} className="text-muted shrink-0" />
+                      <span className="text-muted font-bold w-6 text-right text-lg shrink-0">{idx + 1}.</span>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-lg leading-tight truncate">{workout.exerciseName}</h3>
+                        <p className="text-xs text-muted font-bold uppercase tracking-widest mt-1">
+                          {workout.isExpanded && workout.setDetails ? workout.setDetails.length : (parseInt(workout.sets) || 0)} serie
+                        </p>
+                      </div>
+                    </div>
+                  </Reorder.Item>
+                ))}
+              </Reorder.Group>
+            </div>
+
+            <div className="absolute bottom-10 left-0 right-0 flex justify-center px-6">
+              <button 
+                onClick={() => setIsExerciseFocusMode(false)}
+                className="w-full max-w-sm bg-accentOrange text-white font-bold text-lg py-4 shadow-[0_0_30px_rgba(255,159,10,0.4)] active:scale-95 transition-all flex items-center justify-center"
+                style={{ borderRadius: '9999px' }}
+              >
+                Fatto
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SET FOCUS MODE OVERLAY */}
+      <AnimatePresence>
+        {isSetFocusMode && focusExerciseId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col p-6 touch-none"
+          >
+            {(() => {
+              const workout = activeDay.exercises.find(ex => ex.id === focusExerciseId);
+              if (!workout) return null;
+              return (
+                <>
+                  <div className="flex flex-col space-y-2 mb-8">
+                    <h2 className="text-2xl font-bold tracking-tight truncate">{workout.exerciseName}</h2>
+                    <p className="text-muted text-sm">Sposta le serie per cambiare la sequenza</p>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto hide-scrollbar pb-32">
+                    <Reorder.Group
+                      axis="y"
+                      values={workout.setDetails}
+                      onReorder={(newSets) => {
+                        if (JSON.stringify(newSets) !== JSON.stringify(workout.setDetails)) {
+                          if (navigator.vibrate) navigator.vibrate(20);
+                        }
+                        updateWorkout(workout.id, { setDetails: newSets });
+                      }}
+                      className="space-y-3"
+                    >
+                      {workout.setDetails.map((set, sIdx) => (
+                        <Reorder.Item
+                          key={set.id}
+                          value={set}
+                          whileDrag={{ scale: 1.05, zIndex: 9999 }}
+                          animate={{ scale: 1, zIndex: 0 }}
+                          transition={{ duration: 0 }}
+                          className="relative"
+                        >
+                          <div className={cn(
+                            "flex items-center space-x-4 p-4 rounded-2xl border-2 border-dashed transition-all",
+                            set.isWarmup ? "bg-accentOrange/10 border-accentOrange/30" : "bg-white/5 border-white/20"
+                          )}>
+                            <GripVertical size={18} className="text-muted shrink-0" />
+                            <div className="w-8 text-center font-bold text-muted text-lg">{sIdx + 1}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}>
+                                  {set.isWarmup ? 'Warm' : 'Work'}
+                                </span>
+                                <span className="font-mono text-white text-lg">{set.reps} x {set.weight}kg</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
+                  </div>
+
+                  <div className="absolute bottom-10 left-0 right-0 flex justify-center px-6">
+                    <button 
+                      onClick={() => setIsSetFocusMode(false)}
+                      className="w-full max-w-sm bg-accentOrange text-white font-bold text-lg py-4 shadow-[0_0_30px_rgba(255,159,10,0.4)] active:scale-95 transition-all flex items-center justify-center"
+                      style={{ borderRadius: '9999px' }}
+                    >
+                      Fatto
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </motion.div>
   );

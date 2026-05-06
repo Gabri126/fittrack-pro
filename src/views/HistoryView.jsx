@@ -3,7 +3,8 @@ import { Trophy, Clock, CheckCircle2, Share, CalendarDays, Dumbbell, Flame, Chev
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../App';
 
-export default function HistoryView({ history }) {
+export default function HistoryView({ history, library }) {
+  const activePlan = library?.find(p => p.status === 'active');
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -143,20 +144,29 @@ export default function HistoryView({ history }) {
           ))}
           {calendarDays.map((day, i) => {
             if (day === null) return <div key={`empty-${i}`} />;
+            
+            const dayDate = new Date(calendarMonth.year, calendarMonth.month, day);
+            const dayOfWeek = dayDate.getDay();
+            const dayOfWeekAdjusted = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0
+            const planDay = activePlan?.days.find(d => d.dayOfWeek === dayOfWeekAdjusted);
+            const isScheduled = planDay && (planDay.exercises.length > 0 || planDay.tags?.length > 0);
+            
             const key = `${calendarMonth.year}-${calendarMonth.month}-${day}`;
             const count = workoutDates[key] || 0;
             const today = new Date();
             const isToday = day === today.getDate() && calendarMonth.month === today.getMonth() && calendarMonth.year === today.getFullYear();
+            
             return (
-              <div
-                key={`day-${day}`}
-                className={cn(
-                  "w-full aspect-square rounded-lg flex items-center justify-center text-xs font-medium transition-colors",
-                  count > 0 ? "bg-accentBlue/30 text-accentBlue font-bold shadow-[0_0_6px_rgba(10,132,255,0.3)]" : "text-muted/60",
-                  isToday && "ring-1 ring-white/40"
-                )}
-              >
-                {day}
+              <div key={day} className="relative aspect-square flex items-center justify-center">
+                {isToday && <div className="absolute inset-0 border border-white/50 rounded-lg z-10" />}
+                <div className={cn(
+                  "w-7 h-7 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center border",
+                  count > 0 
+                    ? "bg-green-500 text-black border-green-500 shadow-[0_0_10px_rgba(52,199,89,0.3)]" 
+                    : (isScheduled ? "bg-accentOrange/10 text-accentOrange border-accentOrange/30 border-dashed" : "text-muted/40 border-transparent")
+                )}>
+                  {day}
+                </div>
               </div>
             );
           })}

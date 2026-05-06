@@ -91,28 +91,31 @@ export default function App() {
     if (isTimerRunning && timerLeft > 0) {
       interval = setInterval(() => {
         setTimerLeft(prev => {
-          const next = prev - 1;
+          const next = Math.max(0, prev - 0.01);
           if (next <= 0) {
-            // VIA! moment
-            if (navigator.vibrate) navigator.vibrate(50);
+            if (navigator.vibrate) navigator.vibrate([200, 50, 200]);
             setTimeout(() => {
               setIsTimerRunning(false);
               setIsTimerFullscreen(false);
             }, 800);
             return 0;
           }
-          if (next <= 3 && next >= 1) {
+          
+          const currentSec = Math.ceil(prev);
+          const nextSec = Math.ceil(next);
+          if (nextSec < currentSec && nextSec <= 3 && nextSec >= 1) {
             if (navigator.vibrate) navigator.vibrate(10);
           }
-          if (next === 15) {
+          
+          if (nextSec === 15 && currentSec === 16) {
             setIsTimerFullscreen(true);
           }
           return next;
         });
-      }, 1000);
+      }, 10);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning, timerLeft]);
+  }, [isTimerRunning]);
 
   const startTimer = (seconds = 90) => {
     setTimerTotal(seconds);
@@ -179,7 +182,7 @@ export default function App() {
         )}
         {currentTab === 'history' && (
           <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="h-full">
-            <HistoryView history={history} />
+            <HistoryView history={history} library={library} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -188,19 +191,7 @@ export default function App() {
       <AnimatePresence>
         {isTimerRunning && (
           <>
-            {/* Top-Edge Progress Bar */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed top-0 left-0 right-0 z-[60] h-[2px] bg-white/10"
-            >
-              <motion.div
-                className="h-full bg-accentOrange shadow-[0_0_8px_rgba(255,159,10,0.6)]"
-                style={{ width: timerTotal > 0 ? `${(timerLeft / timerTotal) * 100}%` : '0%' }}
-                transition={{ duration: 0.3, ease: 'linear' }}
-              />
-            </motion.div>
+
 
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.9 }}
@@ -229,16 +220,16 @@ export default function App() {
                       >
                         VIA!
                       </motion.div>
-                    ) : timerLeft <= 3 ? (
+                    ) : Math.ceil(timerLeft) <= 3 ? (
                       <motion.div
-                        key={`count-${timerLeft}`}
+                        key={`count-${Math.ceil(timerLeft)}`}
                         initial={{ opacity: 0, scale: 1.5 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.5 }}
                         transition={{ duration: 0.3 }}
                         className="text-[200px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
                       >
-                        {timerLeft}
+                        {Math.ceil(timerLeft)}
                       </motion.div>
                     ) : (
                       <motion.div
@@ -248,7 +239,7 @@ export default function App() {
                         exit={{ opacity: 0 }}
                         className="text-[180px] leading-none font-bold font-mono text-white tabular-nums tracking-tighter"
                       >
-                        {timerLeft}
+                        {Math.ceil(timerLeft)}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -270,10 +261,10 @@ export default function App() {
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 18}
                       strokeDashoffset={2 * Math.PI * 18 * (1 - (timerTotal > 0 ? timerLeft / timerTotal : 0))}
-                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                      style={{ transition: 'stroke-dashoffset 0.01s linear' }}
                     />
                   </svg>
-                  <span className="absolute font-bold font-mono text-white tabular-nums text-xs">{timerLeft}</span>
+                  <span className="absolute font-bold font-mono text-white tabular-nums text-xs">{Math.ceil(timerLeft)}</span>
                 </div>
               )}
             </motion.div>

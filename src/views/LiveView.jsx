@@ -486,17 +486,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
             <ArrowLeft size={20} />
           </button>
           
-          {/* Streak Bar */}
-          <div className="flex items-center space-x-2 mx-auto">
-            {activeWorkout.exercises.map((_, idx) => (
-              <div key={idx} className="flex items-center">
-                <div className={cn("w-2 h-2 rounded-full transition-all duration-300", idx < currentExerciseIndex ? "bg-green-500 shadow-[0_0_10px_rgba(52,199,89,0.8)]" : idx === currentExerciseIndex ? "bg-accentBlue shadow-[0_0_10px_rgba(10,132,255,0.8)] animate-pulse" : "border border-border bg-transparent")} />
-                {idx < activeWorkout.exercises.length - 1 && (
-                  <div className={cn("w-4 h-px", idx < currentExerciseIndex ? "bg-green-500/50" : "bg-border/50")} />
-                )}
-              </div>
-            ))}
-          </div>
+
 
           <button onClick={() => setIsPaused(true)} className="p-2 rounded-full hover:bg-white/10 text-muted hover:text-white transition-colors absolute right-0 top-1/2 -translate-y-1/2 z-20 pointer-events-auto">
             <Pause size={20} />
@@ -544,12 +534,7 @@ export default function LiveView({ library, activeWorkout, setActiveWorkout, set
                 )}
               </h3>
 
-              {/* Segmented Progress Bar */}
-              <div className="flex space-x-1.5 w-full mb-6 shrink-0 px-4">
-                {currentExercise.sets.map((s, i) => (
-                  <div key={i} className={cn("h-1 flex-1 rounded-full transition-colors duration-500", s.completed ? "bg-accentBlue shadow-[0_0_8px_rgba(10,132,255,0.8)]" : "bg-border/50")} />
-                ))}
-              </div>
+
 
               {/* Active Set UI */}
               <div className="flex-1 flex flex-col items-center justify-center min-h-[160px] shrink-0">

@@ -3,13 +3,22 @@
 
 @layer base {
   html, body {
-    touch-action: manipulation;
+    touch-action: none; /* Strict anti-zoom default */
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-black text-white antialiased selection:bg-accentBlue selection:text-white;
   }
+}
+
+/* Allow scrolling only in specific areas */
+.overflow-y-auto, .overflow-x-auto {
+  touch-action: pan-y;
+}
+
+.reorder-item, .picker-wheel {
+  touch-action: none !important;
 }
 
 /* Hide scrollbar for clean horizontal scrolling */
