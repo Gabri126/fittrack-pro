@@ -177,6 +177,11 @@ export default function App() {
               resetTimer={resetTimer}
               setCurrentTab={setCurrentTab}
               setIsTabBarHidden={setIsTabBarHidden}
+              isTimerRunning={isTimerRunning}
+              timerLeft={timerLeft}
+              timerTotal={timerTotal}
+              isTimerFullscreen={isTimerFullscreen}
+              setIsTimerFullscreen={setIsTimerFullscreen}
             />
           </motion.div>
         )}
@@ -198,7 +203,7 @@ export default function App() {
               animate={
                 isTimerFullscreen
                   ? { opacity: 1, y: 0, scale: 1, inset: 0, borderRadius: 0 }
-                  : { opacity: 1, y: 16, x: -16, scale: 1, top: 16, right: 16, bottom: 'auto', left: 'auto', width: 'auto', height: 'auto', borderRadius: 9999 }
+                  : { opacity: 0, pointerEvents: 'none' } // Hidden when not fullscreen
               }
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className={cn(

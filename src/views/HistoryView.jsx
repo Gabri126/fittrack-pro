@@ -29,7 +29,7 @@ export default function HistoryView({ history, library }) {
     history.forEach(session => {
       session.exercises?.forEach(ex => {
         ex.sets?.forEach(s => {
-          if (s.completed && s.weight > 0) {
+          if (s.completed && s.weight > 0 && !s.isWarmup) {
             const name = ex.exerciseName;
             if (!prMap[name] || s.weight > prMap[name].weight) {
               prMap[name] = { weight: s.weight, reps: s.reps, date: session.date };

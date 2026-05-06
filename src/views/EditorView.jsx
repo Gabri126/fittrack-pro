@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus, GripVertical, Settings2, Timer, NotebookPen, ChevronDown, ChevronUp, ListOrdered } from 'lucide-react';
+import { Plus, BrainCircuit, ScanLine, Dumbbell, Calendar, Trash2, Activity, Copy, Archive, CheckCircle2, ChevronRight, ArrowLeft, Image as ImageIcon, Camera, CalendarDays, Flame, Trophy, Play, History as HistoryIcon, Heart, Search, X, Library, Tag, Edit3, Inbox, MoveRight, Minus, GripVertical, Settings2, Timer, NotebookPen, ChevronDown, ChevronUp, ListOrdered, AlertTriangle, Hash, RefreshCcw, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { cn } from '../App';
 import { SingleScrollPicker, WeightScrollPicker, TimeScrollPicker, NotesModal } from '../components/Pickers';
@@ -457,10 +457,14 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     const reps = parseInt(ex.reps) || 10;
     const weight = parseFloat(ex.weight) || 0;
     const setDetails = Array.from({length: numSets}, (_, i) => ({
-      id: `set-${Date.now()}-${i}`, reps, weight, isWarmup: false
+      id: `set-${Date.now()}-${i}`, 
+      reps, 
+      weight, 
+      type: 'reps',
+      isWarmup: false,
+      restTime: null
     }));
     updateWorkout(workoutId, { isExpanded: true, setDetails, restTime: '', notes: '' });
-    // Ensure expanded card is not collapsed
     setCollapsedCards(p => ({...p, [workoutId]: false}));
   };
 
@@ -471,7 +475,9 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
       id: `set-${Date.now()}`,
       reps: lastSet ? lastSet.reps : 10,
       weight: lastSet ? lastSet.weight : 0,
-      isWarmup: false
+      type: lastSet ? (lastSet.type || 'reps') : 'reps',
+      isWarmup: false,
+      restTime: null
     };
     updateWorkout(workoutId, { setDetails: [...ex.setDetails, newSet] });
     if (navigator.vibrate) navigator.vibrate(10);
@@ -483,10 +489,45 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
     updateWorkout(workoutId, { setDetails: ex.setDetails.filter(s => s.id !== setId) });
   };
 
+  const [isWarmupInfoOpen, setIsWarmupInfoOpen] = useState(false);
+
   const updateDetailedRow = (workoutId, setId, field, value) => {
     const ex = activeDay.exercises.find(w => w.id === workoutId);
     const newSets = ex.setDetails.map(s => s.id === setId ? { ...s, [field]: value } : s);
     updateWorkout(workoutId, { setDetails: newSets });
+  };
+
+  const generateWarmup = (workoutId) => {
+    const ex = activeDay.exercises.find(w => w.id === workoutId);
+    if (!ex || !ex.setDetails) return;
+    
+    const warmups = ex.setDetails.filter(s => s.isWarmup);
+    if (warmups.length >= 2 && warmups.some(s => s.warmupStep === 1) && warmups.some(s => s.warmupStep === 2)) return;
+
+    const baseSet = ex.setDetails.find(s => !s.isWarmup) || ex.setDetails[0];
+    const targetW = parseFloat(baseSet.weight) || 0;
+    const targetR = parseInt(baseSet.reps) || 10;
+    
+    const w1Weight = Math.round(targetW * 0.5 * 2) / 2;
+    const w2Weight = Math.round(targetW * 0.75 * 2) / 2;
+    const w2Reps = Math.max(4, Math.floor(targetR * 0.5));
+
+    const hasStep1 = warmups.some(s => s.warmupStep === 1);
+    const hasStep2 = warmups.some(s => s.warmupStep === 2);
+    
+    let updatedWarmups = [...warmups];
+    if (!hasStep1) {
+      updatedWarmups.push({ id: `warm-${Date.now()}-1`, reps: targetR, weight: w1Weight, isWarmup: true, warmupStep: 1, restTime: 45 });
+    }
+    if (!hasStep2) {
+      updatedWarmups.push({ id: `warm-${Date.now()}-2`, reps: w2Reps, weight: w2Weight, isWarmup: true, warmupStep: 2, restTime: 45 });
+    }
+    
+    updatedWarmups.sort((a, b) => a.warmupStep - b.warmupStep);
+    const nonWarmups = ex.setDetails.filter(s => !s.isWarmup);
+    
+    updateWorkout(workoutId, { setDetails: [...updatedWarmups, ...nonWarmups] });
+    if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
   };
 
   const openSinglePicker = (title, options, initialValue, unit, onSelect) => {
@@ -1545,35 +1586,110 @@ export default function EditorView({ library, setLibrary, history, setCurrentTab
                               onPointerMove={handleExercisePointerUp}
                               onPointerLeave={handleExercisePointerUp}
                             >
-                              <div className="flex text-[10px] uppercase font-bold text-muted px-2 mb-1">
-                                <div className="w-8 text-center">Set</div>
-                                <div className="w-10 text-center">Warm</div>
-                                <div className="flex-1 text-center">Reps</div>
+                              <div className="flex items-center text-[10px] uppercase font-bold text-muted px-2 mb-1">
+                                <div className="w-8 text-center shrink-0">Set</div>
+                                <div className="w-10 text-center shrink-0">Warm</div>
+                                <button 
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => {
+                                    if (navigator.vibrate) navigator.vibrate(10);
+                                    const allTimed = workout.setDetails?.every(s => (s.type || 'reps') === 'time');
+                                    const newType = allTimed ? 'reps' : 'time';
+                                    const newSets = workout.setDetails?.map(s => ({ ...s, type: newType }));
+                                    updateWorkout(workout.id, { setDetails: newSets });
+                                  }}
+                                  className="flex-1 flex items-center justify-center space-x-1 group hover:text-white transition-colors"
+                                >
+                                  <span>{workout.setDetails?.every(s => (s.type || 'reps') === 'time') ? 'SEC' : 'REP'}</span>
+                                  <RefreshCcw size={12} className="text-accentBlue group-active:rotate-180 transition-transform" />
+                                </button>
                                 <div className="flex-1 text-center">Kg</div>
-                                <div className="w-8"></div>
+                                <div className="w-8 shrink-0"></div>
                               </div>
-                              {workout.setDetails.map((set, sIdx) => (
+                              {workout.setDetails?.map((set, sIdx) => (
                                 <div key={set.id} className={cn("flex items-center space-x-2 p-2 rounded-2xl border transition-colors", set.isWarmup ? "bg-accentOrange/5 border-accentOrange/20" : "bg-black/30 border-border")}>
-                                  <div className="w-8 text-center font-bold text-muted">{sIdx + 1}</div>
-                                  <div className="w-10 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
+                                  <div className="w-8 text-center font-bold text-muted shrink-0">{sIdx + 1}</div>
+                                  <div className="w-10 flex justify-center shrink-0" onPointerDown={(e) => e.stopPropagation()}>
                                     <button onClick={() => updateDetailedRow(workout.id, set.id, 'isWarmup', !set.isWarmup)} className={cn("w-6 h-6 rounded flex items-center justify-center font-bold text-[10px] transition-colors", set.isWarmup ? "bg-accentOrange text-white" : "bg-white/10 text-muted")}>W</button>
                                   </div>
                                   <div className="flex-1" onPointerDown={(e) => e.stopPropagation()}>
-                                    <div onClick={() => openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.reps}</div>
+                                    <div 
+                                      onClick={() => {
+                                        if ((set.type || 'reps') === 'time') {
+                                          openTimePicker('Secondi', set.reps, (val) => updateDetailedRow(workout.id, set.id, 'reps', val));
+                                        } else {
+                                          openSinglePicker('Ripetizioni', REPS_OPTIONS, set.reps, '', (val) => updateDetailedRow(workout.id, set.id, 'reps', val));
+                                        }
+                                      }} 
+                                      className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors"
+                                    >
+                                      {set.reps}{(set.type || 'reps') === 'time' ? 's' : ''}
+                                    </div>
                                   </div>
                                   <div className="flex-1" onPointerDown={(e) => e.stopPropagation()}>
                                     <div onClick={() => openWeightPicker('Carico (Kg)', set.weight, (val) => updateDetailedRow(workout.id, set.id, 'weight', val))} className="w-full h-9 bg-black/50 border border-border/50 rounded-lg flex items-center justify-center font-mono text-sm cursor-pointer hover:border-white/30 transition-colors">{set.weight}</div>
                                   </div>
-                                  <div className="w-8 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
-                                    <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400"><X size={14}/></button>
+                                  <div className="flex items-center space-x-1" onPointerDown={(e) => e.stopPropagation()}>
+                                    <button 
+                                      onClick={() => openTimePicker('Recupero Serie', set.restTime || 0, (val) => {
+                                        // Reset Logic: se l'utente imposta 0, cancelliamo l'override per tornare al globale
+                                        updateDetailedRow(workout.id, set.id, 'restTime', val === 0 ? null : val);
+                                      })}
+                                      className={cn(
+                                        "h-7 px-2 rounded-lg flex items-center justify-center transition-all border",
+                                        set.restTime ? "bg-accentOrange/10 border-accentOrange/30" : "bg-white/5 border-transparent"
+                                      )}
+                                    >
+                                      <Timer size={12} className={set.restTime ? "text-accentOrange" : "text-muted/40"} />
+                                      <span className={cn(
+                                        "text-[10px] ml-1 font-mono",
+                                        set.restTime ? "text-white font-bold" : "text-muted/40"
+                                      )}>
+                                        {set.restTime ? `${set.restTime}s` : `(${Math.floor((workout.restTime || 90)/60)}:${((workout.restTime || 90)%60).toString().padStart(2, '0')})`}
+                                      </span>
+                                    </button>
+                                    <button onClick={() => removeDetailedRow(workout.id, set.id)} className="text-muted hover:text-red-400 p-1"><X size={14}/></button>
                                   </div>
                                 </div>
                               ))}
-                              <div className="flex space-x-2 pt-2">
-                                <button onClick={() => addDetailedRow(workout.id)} className="flex-1 py-2 text-xs font-bold text-muted bg-white/5 rounded-xl border border-dashed border-border flex justify-center items-center hover:text-white transition-colors">
-                                  <Plus size={14} className="mr-1"/> Nuova Serie
+                              <div className="flex space-x-2 pt-2 items-center">
+                                <div className="flex-1 flex items-center space-x-1">
+                                  <button 
+                                    disabled={workout.setDetails?.filter(s => s.isWarmup && s.warmupStep === 1).length > 0 && workout.setDetails?.filter(s => s.isWarmup && s.warmupStep === 2).length > 0}
+                                    onClick={() => generateWarmup(workout.id)} 
+                                    className={cn(
+                                      "flex-1 py-2 text-[10px] font-bold rounded-xl border border-dashed flex justify-center items-center transition-all uppercase tracking-widest",
+                                      (workout.setDetails?.filter(s => s.isWarmup && s.warmupStep === 1).length > 0 && workout.setDetails?.filter(s => s.isWarmup && s.warmupStep === 2).length > 0) 
+                                        ? "opacity-30 pointer-events-none border-border text-muted" 
+                                        : "text-accentOrange bg-accentOrange/10 border-accentOrange/30 hover:bg-accentOrange/20"
+                                    )}
+                                  >
+                                    <Flame size={12} className="mr-1"/> Riscaldamento
+                                  </button>
+                                  <button onClick={() => setIsWarmupInfoOpen(true)} className="p-2 text-muted hover:text-white transition-colors">
+                                    <AlertTriangle size={14} />
+                                  </button>
+                                </div>
+                                <button onClick={() => addDetailedRow(workout.id)} className="flex-1 py-2 text-[10px] font-bold text-muted bg-white/5 rounded-xl border border-dashed border-border flex justify-center items-center hover:text-white transition-colors uppercase tracking-widest">
+                                  <Plus size={12} className="mr-1"/> Nuova Serie
                                 </button>
                               </div>
+
+                              <AnimatePresence>
+                                {isWarmupInfoOpen && (
+                                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-6">
+                                    <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-surface border border-border p-6 rounded-[32px] max-w-xs text-center relative">
+                                      <button onClick={() => setIsWarmupInfoOpen(false)} className="absolute top-4 right-4 text-muted"><X size={20}/></button>
+                                      <Flame className="text-accentOrange mx-auto mb-4" size={32} />
+                                      <h4 className="font-bold mb-2">Perché scaldarsi?</h4>
+                                      <p className="text-xs text-muted leading-relaxed">
+                                        Il riscaldamento prepara il sistema nervoso e lubrifica le articolazioni senza accumulare fatica metabolica. <br/><br/>
+                                        <span className="text-accentOrange font-bold italic">Queste serie non vengono conteggiate nel volume totale.</span>
+                                      </p>
+                                    </motion.div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                               <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/30">
                                 <div className="relative cursor-pointer" onPointerDown={(e) => e.stopPropagation()} onClick={() => openTimePicker('Recupero', workout.restTime || 0, (val) => updateWorkout(workout.id, {restTime: val}))}>
                                   <Timer size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
