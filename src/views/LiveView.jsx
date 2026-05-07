@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { PlayCircle, CheckCircle2, Trophy, AlertTriangle, ArrowLeft, Heart, Flame, Dumbbell, Zap, Pause, Play, NotebookPen, X, RefreshCcw, RefreshCw, XCircle, ChevronRight, Activity, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  PlayCircle, CheckCircle2, Trophy, AlertTriangle, ArrowLeft, Heart, Flame, Dumbbell, Zap, 
+  Pause, Play, NotebookPen, X, RefreshCcw, RefreshCw, XCircle, ChevronRight, Activity, 
+  Clock, ChevronDown, ChevronUp, BatteryCharging, CalendarDays, Calendar
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { cn } from '../App';
@@ -30,26 +34,14 @@ export default function LiveView({
 }) {
   
   const activePlan = library?.find(p => p.status === 'active');
-
-  // 1. TOP LEVEL SAFETY GUARD
-  if (!activeWorkout && !activePlan) {
-    return (
-      <div className="flex flex-col h-full bg-black text-white p-8 items-center justify-center text-center">
-        <Dumbbell size={64} className="text-muted/20 mb-6" />
-        <h2 className="text-2xl font-bold mb-2 uppercase italic tracking-tighter">Nessun Allenamento</h2>
-        <p className="text-muted text-sm max-w-xs leading-relaxed">Attiva un piano nel Laboratorio per sbloccare il briefing giornaliero e iniziare la sessione.</p>
-        <button onClick={() => setCurrentTab('editor')} className="mt-8 bg-white text-black font-black uppercase tracking-widest px-8 py-3 rounded-full active:scale-95 transition-all text-xs">Vai al Laboratorio</button>
-      </div>
-    );
-  }
-
   const todayDayOfWeek = new Date().getDay();
   const [selectedDayIndex, setSelectedDayIndex] = useState(todayDayOfWeek);
-  const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [direction, setDirection] = useState(1);
   const [activePicker, setActivePicker] = useState(null); // 'reps', 'weight'
   const [activeSetTimer, setActiveSetTimer] = useState(null); // { left, total }
   const [isPaused, setIsPaused] = useState(false);
+  const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
+  const [pendingWarmupInjection, setPendingWarmupInjection] = useState(false);
 
   useEffect(() => {
     return () => setIsTabBarHidden(false);
@@ -63,7 +55,7 @@ export default function LiveView({
     }
   }, [isPaused, isWorkoutFinished, activeWorkout, setIsTabBarHidden]);
 
-  // PROTECTED DERIVED VARIABLES (Optional Chaining everywhere)
+  // PROTECTED DERIVED VARIABLES
   const currentExercise = activeWorkout?.exercises?.[currentExerciseIndex] || null;
   const activeSetIndex = currentExercise ? currentExercise.sets.findIndex(s => !s.completed) : -1;
   const isExerciseDone = currentExercise && activeSetIndex === -1;
@@ -72,14 +64,17 @@ export default function LiveView({
 
   const currentVolume = useMemo(() => {
     if (!activeWorkout?.exercises) return 0;
-    return activeWorkout.exercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed && !s.isWarmup).reduce((sum, s) => sum + (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0), 0), 0);
+    return activeWorkout.exercises.reduce((acc, ex) => {
+      const sets = ex.sets || [];
+      return acc + sets.filter(s => s.completed && !s.isWarmup).reduce((sum, s) => sum + (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0), 0);
+    }, 0);
   }, [activeWorkout]);
 
-  // BRIEFING DATA (Memoized)
+  // BRIEFING DATA (Secure definition)
   const briefingData = useMemo(() => {
-    if (!activePlan) return null;
+    if (!activePlan?.days) return null;
     const day = activePlan.days.find(d => d.dayOfWeek === selectedDayIndex);
-    if (!day || day.exercises.length === 0) return null;
+    if (!day || !day.exercises || day.exercises.length === 0) return null;
 
     let totalVol = 0;
     let warmup = 0;
@@ -97,7 +92,19 @@ export default function LiveView({
     return { volume: totalVol, warmup, work, exercisesCount: day.exercises.length, tags: day.tags || [] };
   }, [activePlan, selectedDayIndex]);
 
-  // UTILS
+  // NAVIGATION HANDLERS
+  const handleNextDay = () => {
+    setDirection(1);
+    setSelectedDayIndex(prev => (prev + 1) % 7);
+    if (navigator.vibrate) navigator.vibrate(10);
+  };
+
+  const handlePrevDay = () => {
+    setDirection(-1);
+    setSelectedDayIndex(prev => (prev - 1 + 7) % 7);
+    if (navigator.vibrate) navigator.vibrate(10);
+  };
+
   const formatTime = (sec) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
@@ -105,20 +112,31 @@ export default function LiveView({
   };
 
   const startWorkout = () => {
-    if (!activePlan) return;
+    if (!activePlan?.days) return;
     const currentDay = activePlan.days.find(d => d.dayOfWeek === selectedDayIndex);
-    if (!currentDay || currentDay.exercises.length === 0) return;
+    if (!currentDay || !currentDay.exercises || currentDay.exercises.length === 0) return;
     
     const exercises = currentDay.exercises.map(ex => {
       const sourceSets = ex.setDetails || Array.from({ length: parseInt(ex.sets) || 1 }).map((_, i) => ({
         id: `set-${Date.now()}-${i}`, reps: ex.reps, weight: ex.weight, type: 'reps', isWarmup: false, restTime: null
       }));
-      const sets = sourceSets.map(s => ({ ...s, completed: false, type: s.type || 'reps', isWarmup: s.isWarmup || false, restTime: s.restTime || null }));
+      const sets = sourceSets.map(s => ({ 
+        ...s, 
+        completed: false, 
+        type: s.type || 'reps', 
+        isWarmup: s.isWarmup || false, 
+        restTime: s.restTime || null 
+      }));
       return { ...ex, id: `ex-${Date.now()}-${Math.random()}`, sets };
     });
 
     setActiveWorkout({
-      id: `session-${Date.now()}`, dayId: currentDay.id, dayName: DAY_NAMES[currentDay.dayOfWeek], planName: activePlan.name, startTime: Date.now(), exercises
+      id: `session-${Date.now()}`, 
+      dayId: currentDay.id, 
+      dayName: DAY_NAMES[currentDay.dayOfWeek], 
+      planName: activePlan.name, 
+      startTime: Date.now(), 
+      exercises
     });
     setCurrentExerciseIndex(0);
     setIsWorkoutFinished(false);
@@ -177,9 +195,56 @@ export default function LiveView({
     });
   };
 
+  const injectWarmup = (weightOverride) => {
+    const weight = weightOverride !== undefined ? weightOverride : (currentSet?.weight || 0);
+    const targetReps = parseInt(currentExercise?.reps) || 10;
+
+    if (weight <= 0) {
+      setActivePicker('weight');
+      setPendingWarmupInjection(true);
+      return;
+    }
+
+    setActiveWorkout(prev => {
+      if (!prev) return prev;
+      const exIdx = prev.exercises.findIndex(e => e.id === currentExercise.id);
+      if (exIdx === -1) return prev;
+
+      const newExs = [...prev.exercises];
+      const currentEx = { ...newExs[exIdx] };
+      
+      const warmupA = {
+        id: `warmup-a-${Date.now()}`,
+        weight: Math.round(weight * 0.5 * 4) / 4,
+        reps: targetReps,
+        type: 'reps',
+        isWarmup: true,
+        completed: false,
+        restTime: 60
+      };
+
+      const warmupB = {
+        id: `warmup-b-${Date.now()}`,
+        weight: Math.round(weight * 0.75 * 4) / 4,
+        reps: Math.max(4, Math.floor(targetReps / 2)),
+        type: 'reps',
+        isWarmup: true,
+        completed: false,
+        restTime: 90
+      };
+
+      currentEx.sets = [warmupA, warmupB, ...currentEx.sets];
+      newExs[exIdx] = currentEx;
+
+      return { ...prev, exercises: newExs };
+    });
+
+    setPendingWarmupInjection(false);
+    if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+  };
+
   const goNextExercise = () => {
     if (currentExerciseIndex < totalExercises - 1) {
-      setDirection(1);
       setCurrentExerciseIndex(currentExerciseIndex + 1);
       resetTimer();
     } else {
@@ -189,7 +254,6 @@ export default function LiveView({
 
   const goPrevExercise = () => {
     if (currentExerciseIndex > 0) {
-      setDirection(-1);
       setCurrentExerciseIndex(currentExerciseIndex - 1);
       resetTimer();
     }
@@ -205,51 +269,135 @@ export default function LiveView({
     setCurrentTab('history');
   };
 
-  // 1. DASHBOARD BRIEFING (Se workout non iniziato o non esiste)
+  // 1. DASHBOARD BRIEFING (Safety Guard for activePlan)
   if (!activeWorkout?.startTime && !isWorkoutFinished) {
+    if (!activePlan) {
+      return (
+        <div className="flex flex-col h-full bg-black text-white p-8 items-center justify-center text-center">
+          <Dumbbell size={64} className="text-muted/20 mb-6" />
+          <h2 className="text-2xl font-bold mb-2 uppercase italic tracking-tighter">Nessun Allenamento Attivo</h2>
+          <p className="text-muted text-sm max-w-xs leading-relaxed">Attiva un piano nella libreria per sbloccare il briefing giornaliero.</p>
+          <button onClick={() => setCurrentTab('editor')} className="mt-8 bg-white text-black font-black uppercase tracking-widest px-8 py-3 rounded-full active:scale-95 transition-all text-xs">Vai al Laboratorio</button>
+        </div>
+      );
+    }
+
+    const isToday = selectedDayIndex === todayDayOfWeek;
+
     return (
-      <div className="flex flex-col h-full bg-black text-white p-6 pt-12 pb-24 overflow-hidden relative">
+      <div className="flex flex-col h-full bg-black text-white selection:bg-transparent touch-action-pan-y relative">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vw] bg-accentOrange/10 blur-[120px] rounded-full pointer-events-none" />
-        <div className="relative z-10 mb-8">
-          <h1 className="text-4xl font-black mb-1 tracking-tighter uppercase italic">Training Brief</h1>
-          <p className="text-muted text-xs font-bold uppercase tracking-[0.3em]">{activePlan?.name || 'Piano Libero'}</p>
-        </div>
-        <div className="flex justify-between items-center mb-10 px-2 relative z-10">
-          {DAY_LABELS.map((label, i) => (
-            <button key={i} onClick={() => setSelectedDayIndex(i)} className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-black transition-all border-2", selectedDayIndex === i ? "bg-accentOrange border-accentOrange shadow-lg scale-110 text-white" : "bg-white/5 border-transparent text-muted")}>{label}</button>
-          ))}
-        </div>
-        <div className="flex-1 relative z-10">
-          {briefingData ? (
-            <div className="h-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col">
-              <h2 className="text-3xl font-black tracking-tighter italic uppercase mb-2">{DAY_NAMES[selectedDayIndex]}</h2>
-              <div className="flex flex-wrap gap-2 mb-10">
-                {briefingData.tags.map((t, i) => <span key={i} className="text-[10px] font-black uppercase bg-accentOrange/10 text-accentOrange px-3 py-1 rounded-full">{t}</span>)}
-              </div>
-              <div className="flex-1 flex flex-col justify-center space-y-8">
-                <div>
-                  <span className="text-[10px] font-black text-muted uppercase tracking-[0.3em]">Volume Stimato</span>
-                  <div className="flex items-baseline space-x-2"><span className="text-6xl font-black italic">{briefingData.volume.toLocaleString()}</span><span className="text-xl font-bold text-muted italic">KG</span></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
-                    <span className="text-[10px] text-muted uppercase block mb-1">Esercizi</span>
-                    <span className="text-2xl font-black italic">{briefingData.exercisesCount}</span>
+        
+        {/* Compact Header */}
+        <header className="px-6 pt-12 pb-2 relative z-10">
+          <h1 className="text-lg font-black tracking-tighter uppercase italic text-white/70">Training Brief</h1>
+          <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">{activePlan.name}</p>
+        </header>
+
+        <div className="flex-1 overflow-y-auto hide-scrollbar touch-action-pan-y relative z-10 py-6">
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div 
+              key={selectedDayIndex}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, { offset }) => {
+                if (offset.x > 50) handlePrevDay();
+                else if (offset.x < -50) handleNextDay();
+              }}
+              initial={{ opacity: 0, x: direction * 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -direction * 40 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="px-6 w-full"
+            >
+              {briefingData ? (
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col shadow-2xl relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-3xl font-black tracking-tighter italic uppercase text-white">{DAY_NAMES[selectedDayIndex]}</h2>
+                    {isToday && <span className="bg-accentOrange text-black text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-lg shadow-accentOrange/20">OGGI</span>}
                   </div>
-                  <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
-                    <span className="text-[10px] text-muted uppercase block mb-1">Struttura</span>
-                    <span className="text-xl font-black italic text-accentOrange">{briefingData.warmup}W | {briefingData.work}W</span>
+                  
+                  <div className="flex flex-wrap gap-2 mb-10">
+                    {(briefingData.tags || []).map((t, i) => (
+                      <span key={i} className="text-[10px] font-black uppercase bg-accentBlue/10 text-accentBlue px-3 py-1 rounded-full border border-accentBlue/20">{t}</span>
+                    ))}
+                  </div>
+
+                  <div className="space-y-8 relative z-10">
+                    <div>
+                      <span className="text-[10px] font-black text-muted uppercase tracking-[0.3em] block mb-1">Volume Muscolare</span>
+                      <div className="flex items-baseline space-x-2">
+                        <span className="text-6xl font-black italic tracking-tighter text-white">{briefingData.volume.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-muted italic">KG</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
+                        <span className="text-[10px] text-muted uppercase block mb-1">Esercizi</span>
+                        <span className="text-2xl font-black italic text-white">{briefingData.exercisesCount}</span>
+                      </div>
+                      <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
+                        <span className="text-[10px] text-muted uppercase block mb-1">Set Totali</span>
+                        <span className="text-xl font-black italic text-accentOrange">{briefingData.work} Serie</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <button onClick={startWorkout} className="mt-8 w-full bg-accentOrange py-5 rounded-[28px] font-black text-lg italic uppercase tracking-widest shadow-xl active:scale-95 transition-all">Inizia Allenamento</button>
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-white/5 rounded-[40px] border border-white/10">
-              <Zap size={48} className="text-accentBlue mb-4" />
-              <h2 className="text-2xl font-black italic uppercase">Giorno di Recupero</h2>
-              <p className="text-muted text-sm mt-2 max-w-[200px]">I tuoi muscoli crescono ora. Riposa bene per spingere al massimo domani.</p>
-            </div>
+              ) : (
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-12 flex flex-col items-center justify-center text-center shadow-2xl min-h-[350px]">
+                  <div className="w-20 h-20 bg-accentBlue/10 rounded-full flex items-center justify-center mb-6 border border-accentBlue/20">
+                    <BatteryCharging size={40} className="text-accentBlue animate-pulse" />
+                  </div>
+                  <h2 className="text-2xl font-black italic uppercase text-white mb-2">Rest Day</h2>
+                  <p className="text-muted text-sm max-w-[220px] leading-relaxed">
+                    Oggi è il tuo giorno di recupero. Riposa e ricarica le energie per la prossima sessione.
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Navigation & Action Footer */}
+        <div className="px-6 pb-12 pt-4 relative z-20 space-y-6 mt-auto bg-gradient-to-t from-black via-black/80 to-transparent">
+          <div className="flex items-center space-x-4">
+             <button 
+               disabled={isToday}
+               onClick={() => { setSelectedDayIndex(todayDayOfWeek); setDirection(todayDayOfWeek > selectedDayIndex ? -1 : 1); }}
+               className={cn(
+                 "p-3 rounded-2xl transition-all",
+                 isToday ? "opacity-20 pointer-events-none" : "bg-white/5 text-accentBlue border border-white/10 active:scale-95"
+               )}
+             >
+               <CalendarDays size={24} />
+             </button>
+             
+             <div className="flex-1 flex justify-between items-center bg-white/5 p-1 rounded-2xl border border-white/5">
+                {DAY_LABELS.map((label, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => { setDirection(i > selectedDayIndex ? 1 : -1); setSelectedDayIndex(i); if (navigator.vibrate) navigator.vibrate(5); }} 
+                    className={cn(
+                      "flex-1 h-10 rounded-xl flex items-center justify-center text-[10px] font-black transition-all", 
+                      selectedDayIndex === i ? "bg-white text-black shadow-lg scale-105" : "text-muted hover:text-white"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+             </div>
+          </div>
+          
+          {briefingData && (
+            <button 
+              onClick={startWorkout} 
+              className="w-full bg-accentOrange py-5 rounded-[28px] font-black text-xl italic uppercase tracking-[0.1em] shadow-[0_10px_30px_rgba(255,159,10,0.3)] active:scale-[0.98] transition-all flex items-center justify-center space-x-3"
+            >
+              <span>Inizia Sessione</span>
+              <ChevronRight size={20} />
+            </button>
           )}
         </div>
       </div>
@@ -271,7 +419,7 @@ export default function LiveView({
     );
   }
 
-  // 3. TACTICAL FOCUS VIEW (Solo se c'è un currentExercise valido)
+  // 3. TACTICAL FOCUS VIEW
   if (!currentExercise) return null;
 
   return (
@@ -283,11 +431,21 @@ export default function LiveView({
             <span className="text-2xl font-black italic">{activeSetIndex + 1}</span>
             <span className="text-muted font-bold">/ {currentExercise.sets.length}</span>
           </div>
+          {(activeSetIndex === 0 && !currentExercise.sets.some(s => s.isWarmup)) && (
+            <motion.button 
+              initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+              onClick={() => injectWarmup()}
+              className="mt-2 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-colors border border-white/5 active:scale-90"
+            >
+              <Flame size={12} className="text-accentOrange" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white">+ Scaldati</span>
+            </motion.button>
+          )}
         </div>
         <div className="absolute left-1/2 -translate-x-1/2 top-12 text-center w-[60%]">
           <h2 className="text-lg font-black tracking-tighter uppercase italic truncate">{currentExercise.exerciseName}</h2>
           <div className="flex justify-center space-x-1 mt-2">
-            {activeWorkout?.exercises?.map((ex, i) => (
+            {activeWorkout.exercises.map((ex, i) => (
               <motion.div key={i} animate={i === currentExerciseIndex ? { scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] } : {}} transition={{ repeat: Infinity, duration: 2 }} className={cn("w-1.5 h-1.5 rounded-full", i < currentExerciseIndex ? "bg-[#34C759]" : (i === currentExerciseIndex ? "bg-accentBlue" : "bg-white/10"))} />
             ))}
           </div>
@@ -304,29 +462,33 @@ export default function LiveView({
           {currentSet?.isWarmup && <div className="absolute top-4 left-4 bg-accentOrange text-black text-[9px] font-black uppercase px-3 py-1 rounded-full">Riscaldamento</div>}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <button onClick={() => setActivePicker('weight')} className="bg-white/5 border border-white/10 rounded-[40px] py-12 flex flex-col items-center justify-center active:scale-95 transition-all">
-            <span className="text-[10px] font-black text-muted uppercase mb-4 tracking-widest">Kg</span>
-            <span className="text-6xl font-black italic tracking-tighter tabular-nums">{currentSet?.weight || 0}</span>
-          </button>
-          <button onClick={() => setActivePicker('reps')} className="bg-white/5 border border-white/10 rounded-[40px] py-12 flex flex-col items-center justify-center active:scale-95 transition-all">
-            <div className="flex items-center space-x-1 mb-4">
-              <span className="text-[10px] font-black text-muted uppercase tracking-widest">{currentSet?.type === 'time' ? 'Sec' : 'Rep'}</span>
+        <div className="grid grid-cols-2 gap-6 mb-8">
+          <div className="flex flex-col space-y-3">
+            <span className="text-lg font-bold text-surface uppercase tracking-widest pl-2">Kg</span>
+            <button onClick={() => setActivePicker('weight')} className="bg-surface/50 border border-white/5 rounded-[32px] h-32 flex items-center justify-center active:scale-95 transition-all shadow-lg">
+              <span className="text-6xl font-black italic tracking-tighter tabular-nums">{currentSet?.weight || 0}</span>
+            </button>
+          </div>
+          <div className="flex flex-col space-y-3">
+            <div className="flex items-center justify-between px-2">
+              <span className="text-lg font-bold text-surface uppercase tracking-widest">{currentSet?.type === 'time' ? 'Sec' : 'Rep'}</span>
               <button onClick={(e) => { e.stopPropagation(); setActiveWorkout(prev => {
                 const exs = [...prev.exercises];
                 const sets = [...exs[currentExerciseIndex].sets];
                 sets[activeSetIndex] = { ...sets[activeSetIndex], type: currentSet.type === 'time' ? 'reps' : 'time' };
                 exs[currentExerciseIndex] = { ...exs[currentExerciseIndex], sets };
                 return { ...prev, exercises: exs };
-              })}} className="text-accentBlue hover:text-white transition-colors">
-                <RefreshCw size={10} />
+              })}} className="p-2 -mr-2 text-accentBlue hover:text-white transition-colors active:scale-110">
+                <RefreshCw size={18} />
               </button>
             </div>
-            <div className="flex items-baseline">
-              <span className="text-6xl font-black italic tracking-tighter tabular-nums">{activeSetTimer ? activeSetTimer.left : (currentSet?.reps || 0)}</span>
-              {currentSet?.type === 'time' && !activeSetTimer && <span className="text-xl font-bold text-muted ml-1 italic mt-4">s</span>}
-            </div>
-          </button>
+            <button onClick={() => setActivePicker('reps')} className="bg-surface/50 border border-white/5 rounded-[32px] h-32 flex items-center justify-center active:scale-95 transition-all shadow-lg">
+              <div className="flex items-baseline">
+                <span className="text-6xl font-black italic tracking-tighter tabular-nums">{activeSetTimer ? activeSetTimer.left : (currentSet?.reps || 0)}</span>
+                {currentSet?.type === 'time' && !activeSetTimer && <span className="text-xl font-bold text-muted ml-1 italic mt-4">s</span>}
+              </div>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col justify-end pb-12 space-y-4">
@@ -399,6 +561,9 @@ export default function LiveView({
                   initialValue={currentSet?.weight || 0}
                   onSelect={(val) => {
                     updateSetWeight(currentExercise.id, activeSetIndex, val);
+                    if (pendingWarmupInjection) {
+                      injectWarmup(val);
+                    }
                     setActivePicker(null);
                   }}
                   onClose={() => setActivePicker(null)}

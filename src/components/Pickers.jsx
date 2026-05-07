@@ -8,22 +8,24 @@ export const SingleScrollPicker = ({ isOpen, onClose, title, options = [], initi
   const itemHeight = 56;
 
   useEffect(() => {
-    if (isOpen && scrollRef.current && options.length > 0) {
+    // Inizializzazione unica al montaggio (quando il picker viene aperto tramite AnimatePresence)
+    if (scrollRef.current && options.length > 0) {
       const parsedInitial = parseFloat(initialValue);
       const idx = options.findIndex(o => parseFloat(o) === parsedInitial);
       if (idx !== -1) {
+        // Timeout per permettere al DOM di stabilizzarsi prima dello scroll
         setTimeout(() => {
           if (scrollRef.current) {
             scrollRef.current.scrollTop = idx * itemHeight;
             setSelectedValue(options[idx]);
             lastVibratedValue.current = options[idx];
           }
-        }, 10);
+        }, 50);
       } else {
         setSelectedValue(options[0]);
       }
     }
-  }, [isOpen, initialValue, options]);
+  }, []); // Eseguito solo al mount
 
   const handleScroll = (e) => {
     if (!scrollRef.current || options.length === 0) return;
