@@ -289,12 +289,12 @@ export default function LiveView({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vw] bg-accentOrange/10 blur-[120px] rounded-full pointer-events-none" />
         
         {/* Compact Header */}
-        <header className="px-6 pt-12 pb-2 relative z-10">
-          <h1 className="text-lg font-black tracking-tighter uppercase italic text-white/70">Training Brief</h1>
+        <header className="px-6 pt-6 pb-2 relative z-10">
+          <h1 className="text-sm font-black tracking-tighter uppercase italic text-white/50">Training Brief</h1>
           <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">{activePlan.name}</p>
         </header>
 
-        <div className="flex-1 overflow-y-auto hide-scrollbar touch-action-pan-y relative z-10 py-6">
+        <div className="flex-1 overflow-y-auto hide-scrollbar touch-action-pan-y relative z-10 py-1">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div 
               key={selectedDayIndex}
@@ -309,78 +309,90 @@ export default function LiveView({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -direction * 40 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="px-6 w-full"
+              className="px-6 w-full h-full flex flex-col"
             >
-              {briefingData ? (
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col shadow-2xl relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-3xl font-black tracking-tighter italic uppercase text-white">{DAY_NAMES[selectedDayIndex]}</h2>
-                    {isToday && <span className="bg-accentOrange text-black text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-lg shadow-accentOrange/20">OGGI</span>}
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mb-10">
-                    {(briefingData.tags || []).map((t, i) => (
-                      <span key={i} className="text-[10px] font-black uppercase bg-accentBlue/10 text-accentBlue px-3 py-1 rounded-full border border-accentBlue/20">{t}</span>
-                    ))}
-                  </div>
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-5 flex flex-col shadow-2xl relative overflow-hidden flex-1 min-h-0">
+                <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
+                  <Dumbbell size={140} />
+                </div>
 
-                  <div className="space-y-8 relative z-10">
-                    <div>
-                      <span className="text-[10px] font-black text-muted uppercase tracking-[0.3em] block mb-1">Volume Muscolare</span>
-                      <div className="flex items-baseline space-x-2">
-                        <span className="text-6xl font-black italic tracking-tighter text-white">{briefingData.volume.toLocaleString()}</span>
-                        <span className="text-xl font-bold text-muted italic">KG</span>
-                      </div>
+                {/* Unified Title Area */}
+                <div className="flex items-center justify-between mb-1 relative z-10">
+                  <h2 className="text-2xl font-black tracking-tighter italic uppercase text-white">
+                    {briefingData ? DAY_NAMES[selectedDayIndex] : 'Recovery Day'}
+                  </h2>
+                  {isToday && briefingData && <span className="bg-accentOrange text-black text-[8px] font-black uppercase px-2 py-0.5 rounded shadow-lg shadow-accentOrange/20">OGGI</span>}
+                </div>
+
+                {briefingData ? (
+                  <div className="flex-1 flex flex-col relative z-10">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {(briefingData.tags || []).map((t, i) => (
+                        <span key={i} className="text-[9px] font-black uppercase bg-accentBlue/10 text-accentBlue px-2.5 py-1 rounded-full border border-accentBlue/20">{t}</span>
+                      ))}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
-                        <span className="text-[10px] text-muted uppercase block mb-1">Esercizi</span>
-                        <span className="text-2xl font-black italic text-white">{briefingData.exercisesCount}</span>
+                    <div className="flex-1 flex flex-col justify-around">
+                      <div>
+                        <span className="text-[9px] font-black text-muted uppercase tracking-[0.3em] block mb-0.5">Volume Muscolare</span>
+                        <div className="flex items-baseline space-x-1.5">
+                          <span className="text-4xl font-black italic tracking-tighter text-white">{briefingData.volume.toLocaleString()}</span>
+                          <span className="text-lg font-bold text-muted italic">KG</span>
+                        </div>
                       </div>
-                      <div className="p-5 bg-black/40 border border-white/5 rounded-[28px]">
-                        <span className="text-[10px] text-muted uppercase block mb-1">Set Totali</span>
-                        <span className="text-xl font-black italic text-accentOrange">{briefingData.work} Serie</span>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-4 bg-black/40 border border-white/5 rounded-[24px]">
+                          <span className="text-[9px] text-muted uppercase block mb-0.5">Esercizi</span>
+                          <span className="text-xl font-black italic text-white">{briefingData.exercisesCount}</span>
+                        </div>
+                        <div className="p-4 bg-black/40 border border-white/5 rounded-[24px]">
+                          <span className="text-[9px] text-muted uppercase block mb-0.5">Set Totali</span>
+                          <span className="text-xl font-black italic text-accentOrange">{briefingData.work} Serie</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-12 flex flex-col items-center justify-center text-center shadow-2xl min-h-[350px]">
-                  <div className="w-20 h-20 bg-accentBlue/10 rounded-full flex items-center justify-center mb-6 border border-accentBlue/20">
-                    <BatteryCharging size={40} className="text-accentBlue animate-pulse" />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center relative z-10 py-2">
+                    <div className="w-16 h-16 bg-accentBlue/10 rounded-full flex items-center justify-center border border-accentBlue/20 mb-4">
+                      <BatteryCharging size={32} className="text-accentBlue animate-pulse" />
+                    </div>
+                    <div className="w-full text-center">
+                      <p className="text-muted text-[11px] max-w-[180px] mx-auto leading-relaxed">
+                        Oggi è il tuo giorno di recupero. Riposa e ricarica le energie per la prossima sessione.
+                      </p>
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-black italic uppercase text-white mb-2">Rest Day</h2>
-                  <p className="text-muted text-sm max-w-[220px] leading-relaxed">
-                    Oggi è il tuo giorno di recupero. Riposa e ricarica le energie per la prossima sessione.
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Navigation & Action Footer */}
-        <div className="px-6 pb-12 pt-4 relative z-20 space-y-6 mt-auto bg-gradient-to-t from-black via-black/80 to-transparent">
-          <div className="flex items-center space-x-4">
+        {/* Navigation & Action Footer - Static & External to Swipe */}
+        <div className="px-6 pb-8 pt-2 relative z-20 space-y-4 mt-auto bg-gradient-to-t from-black via-black/80 to-transparent">
+          <div className="flex items-center space-x-3">
              <button 
                disabled={isToday}
-               onClick={() => { setSelectedDayIndex(todayDayOfWeek); setDirection(todayDayOfWeek > selectedDayIndex ? -1 : 1); }}
+               onClick={() => { setSelectedDayIndex(todayDayOfWeek); setDirection(todayDayOfWeek > selectedDayIndex ? -1 : 1); if (navigator.vibrate) navigator.vibrate(5); }}
                className={cn(
-                 "p-3 rounded-2xl transition-all",
-                 isToday ? "opacity-20 pointer-events-none" : "bg-white/5 text-accentBlue border border-white/10 active:scale-95"
+                 "w-11 h-11 rounded-2xl transition-all border flex items-center justify-center shrink-0",
+                 isToday 
+                   ? "bg-white/5 border-white/5 text-white/20 opacity-20 pointer-events-none" 
+                   : "bg-white/5 text-accentBlue border-white/10 active:scale-95 hover:bg-white/10"
                )}
              >
-               <CalendarDays size={24} />
+               <CalendarDays size={20} />
              </button>
              
-             <div className="flex-1 flex justify-between items-center bg-white/5 p-1 rounded-2xl border border-white/5">
+             <div className="flex-1 flex justify-between items-center bg-white/5 p-1 rounded-2xl border border-white/5 h-11">
                 {DAY_LABELS.map((label, i) => (
                   <button 
                     key={i} 
                     onClick={() => { setDirection(i > selectedDayIndex ? 1 : -1); setSelectedDayIndex(i); if (navigator.vibrate) navigator.vibrate(5); }} 
                     className={cn(
-                      "flex-1 h-10 rounded-xl flex items-center justify-center text-[10px] font-black transition-all", 
+                      "flex-1 h-9 rounded-xl flex items-center justify-center text-[9px] font-black transition-all", 
                       selectedDayIndex === i ? "bg-white text-black shadow-lg scale-105" : "text-muted hover:text-white"
                     )}
                   >
@@ -393,10 +405,10 @@ export default function LiveView({
           {briefingData && (
             <button 
               onClick={startWorkout} 
-              className="w-full bg-accentOrange py-5 rounded-[28px] font-black text-xl italic uppercase tracking-[0.1em] shadow-[0_10px_30px_rgba(255,159,10,0.3)] active:scale-[0.98] transition-all flex items-center justify-center space-x-3"
+              className="w-full bg-accentOrange py-4 rounded-[24px] font-black text-lg italic uppercase tracking-[0.1em] shadow-[0_10px_30px_rgba(255,159,10,0.3)] active:scale-[0.98] transition-all flex items-center justify-center space-x-3 h-14"
             >
               <span>Inizia Sessione</span>
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </button>
           )}
         </div>
@@ -491,47 +503,60 @@ export default function LiveView({
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col justify-end pb-12 space-y-4">
+        <div className="flex-1 flex flex-col justify-end pb-8">
           {isTimerRunning && (
-            <div className="flex justify-center mb-4" onClick={() => setIsTimerFullscreen(true)}>
+            <div className="flex justify-center mb-6" onClick={() => setIsTimerFullscreen(true)}>
               <div className="px-6 py-2 bg-accentOrange/10 border border-accentOrange/30 rounded-full flex items-center space-x-3">
                 <Clock size={16} className="text-accentOrange" /><span className="text-xl font-black font-mono tabular-nums text-white">{Math.ceil(timerLeft)}s</span>
                 <span className="text-[10px] font-black text-muted uppercase tracking-widest">Recupero</span>
               </div>
             </div>
           )}
-          {!isExerciseDone ? (
+
+          <div className="flex items-center justify-between space-x-4 pb-safe">
+            {/* Library / Back Button */}
             <button 
-              onClick={() => {
-                if (!currentSet) return;
-                if (currentSet.type === 'time') {
-                  if (activeSetTimer) { setActiveSetTimer(null); completeActiveSet(currentExercise.id, activeSetIndex); }
-                  else { setActiveSetTimer({ left: parseInt(currentSet.reps) || 30, total: parseInt(currentSet.reps) || 30 }); }
-                } else { completeActiveSet(currentExercise.id, activeSetIndex); }
-              }}
-              className={cn("w-full py-8 rounded-[32px] font-black text-2xl uppercase tracking-widest italic shadow-xl active:scale-95 transition-all", activeSetTimer ? "bg-red-500 text-white" : "bg-accentOrange text-white shadow-orange-500/20")}
+              onClick={() => setCurrentTab('editor')} 
+              className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all shrink-0"
             >
-              {activeSetTimer ? "STOP" : (currentSet?.type === 'time' ? "START" : "CHECK")}
+              <ArrowLeft size={24} />
             </button>
-          ) : (
-            <button onClick={goNextExercise} className="w-full py-8 bg-white text-black rounded-[32px] font-black text-2xl uppercase italic active:scale-95 transition-all">Prossimo Esercizio</button>
-          )}
+
+            {/* Main Action Button */}
+            <div className="flex-1">
+              {!isExerciseDone ? (
+                <button 
+                  onClick={() => {
+                    if (!currentSet) return;
+                    if (currentSet.type === 'time') {
+                      if (activeSetTimer) { setActiveSetTimer(null); completeActiveSet(currentExercise.id, activeSetIndex); }
+                      else { setActiveSetTimer({ left: parseInt(currentSet.reps) || 30, total: parseInt(currentSet.reps) || 30 }); }
+                    } else { completeActiveSet(currentExercise.id, activeSetIndex); }
+                  }}
+                  className={cn(
+                    "w-full py-5 rounded-[32px] font-black text-xl uppercase tracking-widest italic shadow-xl active:scale-95 transition-all", 
+                    activeSetTimer ? "bg-red-500 text-white" : "bg-accentOrange text-white shadow-orange-500/20"
+                  )}
+                >
+                  {activeSetTimer ? "STOP" : (currentSet?.type === 'time' ? "START" : "CHECK")}
+                </button>
+              ) : (
+                <button onClick={goNextExercise} className="w-full py-5 bg-white text-black rounded-[32px] font-black text-xl uppercase italic active:scale-95 transition-all">NEXT</button>
+              )}
+            </div>
+
+            {/* Pause Button */}
+            <button 
+              onClick={() => setIsPaused(true)} 
+              className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all shrink-0"
+            >
+              <Pause size={24} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="absolute bottom-8 left-6 right-6 flex items-center justify-between z-30">
-        <button onClick={() => setCurrentTab('editor')} className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all">
-          <ArrowLeft size={24} />
-        </button>
-        <div className="flex space-x-4">
-          <button onClick={goPrevExercise} disabled={currentExerciseIndex === 0} className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-md disabled:opacity-20 active:scale-90 transition-all">
-            <ChevronDown className="rotate-90" size={24} />
-          </button>
-          <button onClick={() => setIsPaused(true)} className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all">
-            <Pause size={24} />
-          </button>
-        </div>
-      </div>
+
 
       <AnimatePresence>
         {isPaused && (

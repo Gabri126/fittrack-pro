@@ -258,22 +258,29 @@ export default function App() {
         {!isTabBarHidden && (
           <motion.nav
             initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-            className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl border-t border-border/50 pb-6 pt-2 px-6 z-40"
+            className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl border-t border-border/50 pb-safe pt-1 px-8 z-40 h-20"
           >
-            <div className="flex justify-between items-center max-w-sm mx-auto relative">
-              <button onClick={() => setCurrentTab('editor')} className={cn("flex flex-col items-center p-2 transition-colors", currentTab === 'editor' ? 'text-white' : 'text-muted hover:text-white/70')}>
-                <Home size={24} className="mb-1" />
-                <span className="text-[10px] font-bold tracking-wider uppercase">Libreria</span>
+            <div className="flex justify-between items-center max-w-sm mx-auto h-full">
+              <button onClick={() => setCurrentTab('editor')} className={cn("flex flex-col items-center p-2 transition-all active:scale-90", currentTab === 'editor' ? 'text-white' : 'text-muted')}>
+                <Home size={22} className="mb-1" />
+                <span className="text-[9px] font-black tracking-wider uppercase">Libreria</span>
               </button>
+              
               <button
                 onClick={() => setCurrentTab('active')}
-                className="absolute left-1/2 -translate-x-1/2 -top-6 w-16 h-16 bg-accentBlue rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(10,132,255,0.4)] text-white hover:scale-105 transition-transform active:scale-95"
+                className={cn(
+                  "w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg",
+                  currentTab === 'active' 
+                    ? "bg-accentBlue shadow-accentBlue/30 text-white" 
+                    : "bg-white/5 text-muted border border-white/5"
+                )}
               >
-                <Play size={28} className="ml-1" />
+                <Dumbbell size={24} />
               </button>
-              <button onClick={() => setCurrentTab('history')} className={cn("flex flex-col items-center p-2 transition-colors", currentTab === 'history' ? 'text-white' : 'text-muted hover:text-white/70')}>
-                <HistoryIcon size={24} className="mb-1" />
-                <span className="text-[10px] font-bold tracking-wider uppercase">Storico</span>
+
+              <button onClick={() => setCurrentTab('history')} className={cn("flex flex-col items-center p-2 transition-all active:scale-90", currentTab === 'history' ? 'text-white' : 'text-muted')}>
+                <HistoryIcon size={22} className="mb-1" />
+                <span className="text-[9px] font-black tracking-wider uppercase">Storico</span>
               </button>
             </div>
           </motion.nav>
