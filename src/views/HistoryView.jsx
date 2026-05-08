@@ -1,102 +1,101 @@
-import React, { useState, useMemo } from 'react';
-import { Trophy, Clock, CheckCircle2, Share, CalendarDays, Dumbbell, Flame, ChevronLeft, ChevronRight, Award } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { 
+  Trophy, CalendarDays, CheckCircle2, Clock, 
+  ArrowLeft, Share2, Award, ChevronRight, Activity, Users, Flame 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../App';
+import { useSupabase } from '../contexts/SupabaseContext';
 
-export default function HistoryView({ history, library }) {
-  const activePlan = library?.find(p => p.status === 'active');
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
+export default function HistoryView({ history, setCurrentTab }) {
+  const ctx = useSupabase();
+  const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'community'
+  const [feed, setFeed] = useState([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'community' && ctx?.session && ctx?.getFeed) {
+      setFeedLoading(true);
+      ctx.getFeed().then(data => {
+        setFeed(data || []);
+        setFeedLoading(false);
+      });
+    }
+  }, [activeTab, ctx?.session]);
+  
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString('it-IT', { 
+      weekday: 'short', 
+      day: 'numeric', 
+      month: 'short' 
+    }).replace('.', '');
+  };
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60);
-    return `${m} min`;
+    const sec = s % 60;
+    return `${m}m ${sec}s`;
   };
 
-  const formatDate = (ts) => {
-    return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
-  };
-
-  // Analytics
   const stats = useMemo(() => {
-    const totalWorkouts = history.length;
-    const totalVolume = history.reduce((sum, s) => sum + (s.volume || 0), 0);
+    if (!history || history.length === 0) return { totalVolume: 0, totalWorkouts: 0, personalRecords: [] };
     
-    // Personal records (max weight per exercise)
-    const prMap = {};
-    history.forEach(session => {
+    const totalVolume = history.reduce((acc, session) => acc + (session.volume || 0), 0);
+    const totalWorkouts = history.length;
+    
+    // Simple PR logic for history view highlights
+    const prs = [];
+    const exerciseBests = {};
+    
+    [...history].reverse().forEach(session => {
       session.exercises?.forEach(ex => {
-        ex.sets?.forEach(s => {
-          if (s.completed && s.weight > 0 && !s.isWarmup) {
-            const name = ex.exerciseName;
-            if (!prMap[name] || s.weight > prMap[name].weight) {
-              prMap[name] = { weight: s.weight, reps: s.reps, date: session.date };
-            }
-          }
-        });
+        const bestSet = ex.sets?.reduce((max, s) => (s.weight > (max?.weight || 0) ? s : max), null);
+        if (bestSet && (!exerciseBests[ex.exerciseName] || bestSet.weight > exerciseBests[ex.exerciseName].weight)) {
+          exerciseBests[ex.exerciseName] = { 
+            name: ex.exerciseName, 
+            weight: bestSet.weight, 
+            reps: bestSet.reps,
+            date: session.date
+          };
+        }
       });
     });
-    const personalRecords = Object.entries(prMap).map(([name, data]) => ({ name, ...data }));
-    personalRecords.sort((a, b) => b.weight - a.weight);
-
-    return { totalWorkouts, totalVolume, personalRecords };
-  }, [history]);
-
-  // Calendar data
-  const workoutDates = useMemo(() => {
-    const map = {};
-    history.forEach(s => {
-      const d = new Date(s.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      map[key] = (map[key] || 0) + 1;
-    });
-    return map;
-  }, [history]);
-
-  const calendarDays = useMemo(() => {
-    const { year, month } = calendarMonth;
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const offset = firstDay === 0 ? 6 : firstDay - 1; // Mon = 0
-    const cells = [];
-    for (let i = 0; i < offset; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    return cells;
-  }, [calendarMonth]);
-
-  const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-
-  const prevMonth = () => setCalendarMonth(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { ...p, month: p.month - 1 });
-  const nextMonth = () => setCalendarMonth(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { ...p, month: p.month + 1 });
-
-  const chartData = [...history].slice(0, 10).reverse();
-  const maxVol = Math.max(...chartData.map(h => h.volume), 1);
-
-  const shareResults = async (session) => {
-    let text = `🏋️ Allenamento Completato!\n`;
-    text += `Volume Totale: ${session.volume.toLocaleString()} kg\n`;
-    text += `Esercizi:\n`;
     
-    session.exercises.forEach(ex => {
-      const completedSets = ex.sets.filter(s => s.completed).length;
-      if (completedSets > 0) {
-        text += `- ${completedSets}x ${ex.exerciseName}\n`;
+    return { totalVolume, totalWorkouts, personalRecords: Object.values(exerciseBests).sort((a, b) => b.date - a.date) };
+  }, [history]);
+
+  const trendsData = useMemo(() => {
+    if (!history) return { data: [], maxVol: 1 };
+    const weeks = {};
+    const now = new Date();
+    
+    for (let i = 0; i < 4; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - (i * 7));
+      const key = `Sett. ${4 - i}`;
+      weeks[key] = 0;
+    }
+
+    history.forEach(session => {
+      const d = new Date(session.date);
+      const diff = Math.floor((now - d) / (1000 * 60 * 60 * 24 * 7));
+      if (diff < 4) {
+        const key = `Sett. ${4 - diff}`;
+        weeks[key] += (session.volume || 0);
       }
     });
-    
-    text += `\nCreato con FitTrack Ultra 🚀`;
 
+    const data = Object.entries(weeks).map(([name, vol]) => ({ name, vol }));
+    const maxVol = Math.max(...data.map(d => d.vol), 1);
+    return { data, maxVol };
+  }, [history]);
+
+  const shareResults = () => {
+    const lastSession = history[0];
+    if (!lastSession) return;
+    const text = `Ho appena completato un allenamento su FitTrack Pro! Volume: ${lastSession.volume}kg in ${formatTime(lastSession.duration)}.`;
     if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Il mio allenamento su FitTrack Ultra',
-          text: text,
-        });
-      } catch (err) {
-        // user cancelled
-      }
+      navigator.share({ title: 'Mio Allenamento', text, url: window.location.href });
     } else {
       navigator.clipboard.writeText(text);
       alert('Risultati copiati negli appunti!');
@@ -104,167 +103,201 @@ export default function HistoryView({ history, library }) {
   };
 
   return (
-    <div className="p-6 pb-32 space-y-6">
-      <header className="pt-8 mb-2">
-        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
-          Storico
-        </h1>
-        <p className="text-muted mt-2">I tuoi progressi nel tempo</p>
+    <div className="p-6 pb-32 space-y-6 h-full overflow-y-auto hide-scrollbar">
+      <header className="pt-8 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-black tracking-tighter uppercase italic text-white leading-none">Analisi Progressi</h1>
+          <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mt-2">Dati & Performance Storica</p>
+        </div>
+        <button onClick={shareResults} className="w-10 h-10 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all">
+          <Share2 size={18} />
+        </button>
       </header>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-surface border border-border/50 rounded-2xl p-4 text-center shadow-soft">
-          <Dumbbell size={16} className="text-accentBlue mx-auto mb-2" />
-          <div className="text-2xl font-bold tracking-tighter">{stats.totalWorkouts}</div>
-          <div className="text-[10px] uppercase font-bold text-muted tracking-widest mt-1">Allenamenti</div>
-        </div>
-        <div className="bg-surface border border-border/50 rounded-2xl p-4 text-center shadow-soft">
-          <Flame size={16} className="text-accentOrange mx-auto mb-2" />
-          <div className="text-2xl font-bold tracking-tighter">{stats.totalVolume > 999 ? `${(stats.totalVolume / 1000).toFixed(1)}k` : stats.totalVolume}</div>
-          <div className="text-[10px] uppercase font-bold text-muted tracking-widest mt-1">Volume (kg)</div>
-        </div>
-        <div className="bg-surface border border-border/50 rounded-2xl p-4 text-center shadow-soft">
-          <Award size={16} className="text-[#FFD700] mx-auto mb-2" />
-          <div className="text-2xl font-bold tracking-tighter">{stats.personalRecords.length}</div>
-          <div className="text-[10px] uppercase font-bold text-muted tracking-widest mt-1">Record</div>
-        </div>
+      {/* Tab Switcher */}
+      <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10">
+        <button onClick={() => setActiveTab('stats')} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5", activeTab === 'stats' ? "bg-white text-black" : "text-muted")}>
+          <Activity size={14} /> Statistiche
+        </button>
+        <button onClick={() => setActiveTab('community')} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5", activeTab === 'community' ? "bg-white text-black" : "text-muted")}>
+          <Users size={14} /> Community
+        </button>
       </div>
 
-      {/* Calendar Heatmap */}
-      <section className="bg-surface/40 border border-border/50 rounded-[28px] p-5 shadow-soft backdrop-blur-md">
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={prevMonth} className="p-1.5 rounded-full hover:bg-white/10 text-muted hover:text-white transition-colors"><ChevronLeft size={18} /></button>
-          <h3 className="font-bold text-sm tracking-tight">{monthNames[calendarMonth.month]} {calendarMonth.year}</h3>
-          <button onClick={nextMonth} className="p-1.5 rounded-full hover:bg-white/10 text-muted hover:text-white transition-colors"><ChevronRight size={18} /></button>
-        </div>
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((d, i) => (
-            <div key={i} className="text-[9px] font-bold text-muted uppercase py-1">{d}</div>
-          ))}
-          {calendarDays.map((day, i) => {
-            if (day === null) return <div key={`empty-${i}`} />;
-            
-            const dayDate = new Date(calendarMonth.year, calendarMonth.month, day);
-            const dayOfWeek = dayDate.getDay();
-            const dayOfWeekAdjusted = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0
-            const planDay = activePlan?.days.find(d => d.dayOfWeek === dayOfWeekAdjusted);
-            const isScheduled = planDay && (planDay.exercises.length > 0 || planDay.tags?.length > 0);
-            
-            const key = `${calendarMonth.year}-${calendarMonth.month}-${day}`;
-            const count = workoutDates[key] || 0;
-            const today = new Date();
-            const isToday = day === today.getDate() && calendarMonth.month === today.getMonth() && calendarMonth.year === today.getFullYear();
-            
-            return (
-              <div key={day} className="relative aspect-square flex items-center justify-center">
-                {isToday && <div className="absolute inset-0 border border-white/50 rounded-lg z-10" />}
-                <div className={cn(
-                  "w-7 h-7 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center border",
-                  count > 0 
-                    ? "bg-green-500 text-black border-green-500 shadow-[0_0_10px_rgba(52,199,89,0.3)]" 
-                    : (isScheduled ? "bg-accentOrange/10 text-accentOrange border-accentOrange/30 border-dashed" : "text-muted/40 border-transparent")
-                )}>
-                  {day}
+      <AnimatePresence mode="wait">
+        {activeTab === 'stats' ? (
+          <motion.div key="stats" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+            {/* PR Highlights Slider */}
+            {stats.personalRecords.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <h3 className="text-xs font-black text-muted uppercase tracking-widest flex items-center">
+                    <Trophy size={14} className="mr-2 text-[#FFD700]" /> Nuovi Record
+                  </h3>
+                </div>
+                <div className="flex space-x-3 overflow-x-auto hide-scrollbar pb-2">
+                  {stats.personalRecords.slice(0, 6).map((pr, i) => (
+                    <div key={i} className="shrink-0 w-40 bg-surface/40 border border-white/5 rounded-[24px] p-4 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-2 opacity-[0.05] pointer-events-none">
+                        <Award size={40} />
+                      </div>
+                      <h4 className="text-[10px] font-black text-muted uppercase truncate mb-1">{pr.name}</h4>
+                      <div className="flex items-baseline space-x-1">
+                        <span className="text-xl font-black text-white italic">{pr.weight}</span>
+                        <span className="text-[10px] font-bold text-accentOrange italic">KG</span>
+                      </div>
+                      <p className="text-[9px] font-bold text-white/50 mt-1">x{pr.reps} Reps</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Weekly Trends Chart */}
+            <section className="bg-surface/40 border border-white/5 rounded-[32px] p-6 backdrop-blur-xl shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xs font-black text-white uppercase tracking-widest">Trend Volume (Mensile)</h3>
+                <div className="flex items-center space-x-2">
+                   <div className="w-2 h-2 bg-accentBlue rounded-full shadow-[0_0_8px_rgba(10,132,255,0.5)]" />
+                   <span className="text-[9px] font-bold text-muted uppercase italic">Progressione</span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Personal Records (top 5) */}
-      {stats.personalRecords.length > 0 && (
-        <section className="bg-surface/40 border border-border/50 rounded-[28px] p-5 shadow-soft backdrop-blur-md">
-          <h3 className="text-sm font-medium text-muted mb-4 flex items-center"><Award size={16} className="mr-2 text-[#FFD700]"/>Record Personali</h3>
-          <div className="space-y-2">
-            {stats.personalRecords.slice(0, 5).map((pr, i) => (
-              <div key={i} className="flex justify-between items-center py-2 border-b border-border/30 last:border-0">
-                <span className="text-sm font-medium truncate flex-1 mr-4">{pr.name}</span>
-                <span className="text-sm font-bold font-mono text-accentOrange whitespace-nowrap">{pr.weight} kg × {pr.reps}</span>
+              
+              <div className="h-32 flex items-end justify-between space-x-4 px-2">
+                {trendsData.data.map((d, i) => {
+                  const h = (d.vol / trendsData.maxVol) * 100;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center group relative">
+                      <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity bg-black border border-white/10 px-2 py-0.5 rounded text-[9px] font-mono whitespace-nowrap z-10">
+                        {Math.round(d.vol).toLocaleString()} kg
+                      </div>
+                      <motion.div 
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(h, 4)}%` }}
+                        transition={{ type: 'spring', damping: 15, stiffness: 100, delay: i * 0.1 }}
+                        className={cn(
+                          "w-full rounded-t-xl transition-all shadow-lg",
+                          i === 3 ? "bg-accentBlue shadow-accentBlue/20" : "bg-white/10"
+                        )}
+                      />
+                      <span className="text-[8px] font-black text-muted uppercase mt-3 tracking-tighter">{d.name}</span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            </section>
 
-      {/* Volume Chart */}
-      {history.length > 0 && (
-        <section className="bg-surface/40 border border-border/50 rounded-[28px] p-5 shadow-soft backdrop-blur-md">
-          <h3 className="text-sm font-medium text-muted mb-6 flex items-center"><Trophy size={16} className="mr-2 text-accentOrange"/> Trend Volume</h3>
-          <div className="h-28 flex items-end space-x-2 w-full">
-            {chartData.map((session) => {
-              const heightPct = Math.max((session.volume / maxVol) * 100, 5);
-              return (
-                <div key={session.id} className="flex-1 flex flex-col items-center justify-end h-full group relative">
-                  <div className="absolute -top-8 bg-black border border-border text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-mono shadow-soft">
-                    {session.volume} kg
-                  </div>
-                  <div 
-                    className="w-full bg-gradient-to-t from-accentBlue/20 to-accentBlue rounded-t-md transition-all duration-500 shadow-[0_0_10px_rgba(10,132,255,0.2)]" 
-                    style={{ height: `${heightPct}%` }}
-                  ></div>
+            {/* Compact Session List */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="text-xs font-black text-muted uppercase tracking-widest">Sessioni Recenti</h3>
+              </div>
+              
+              <div className="space-y-3">
+                {history.length === 0 ? (
+                   <div className="py-20 text-center space-y-4">
+                     <CalendarDays size={48} className="mx-auto text-white/5" />
+                     <p className="text-muted text-xs uppercase tracking-widest">Nessuna sessione trovata</p>
+                   </div>
+                ) : (
+                  history.map(session => (
+                    <div 
+                      key={session.id}
+                      className="bg-surface/40 border border-white/5 p-4 rounded-[28px] flex items-center justify-between hover:border-white/10 transition-all active:scale-[0.98]"
+                    >
+                      <div className="flex items-center space-x-4 shrink-0">
+                        <div className="w-10 h-10 bg-accentBlue/10 rounded-2xl flex items-center justify-center border border-accentBlue/20 text-accentBlue">
+                          <CheckCircle2 size={18} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white italic">{formatDate(session.date).split(',')[0]}</h4>
+                          <span className="text-[10px] font-black text-muted uppercase tracking-widest">{formatTime(session.duration)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="flex items-baseline justify-end space-x-1">
+                          <span className="text-lg font-black text-white italic">{session.volume.toLocaleString()}</span>
+                          <span className="text-[8px] font-black text-accentBlue italic">KG</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[8px] font-black text-muted uppercase tracking-widest">
+                            {session.exercises?.length} Esercizi
+                          </span>
+                          {(() => {
+                            const allSets = session.exercises?.flatMap(ex => ex.sets || []) || [];
+                            const rpeSets = allSets.filter(s => s.rpe);
+                            if (rpeSets.length === 0) return null;
+                            const avgRpe = (rpeSets.reduce((acc, s) => acc + s.rpe, 0) / rpeSets.length).toFixed(1);
+                            return (
+                              <span className="text-[8px] font-black text-accentOrange uppercase tracking-tighter mt-0.5">
+                                Avg RPE: {avgRpe}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </motion.div>
+        ) : (
+          <motion.div key="community" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-4">
+            {!ctx?.session ? (
+              <div className="py-20 text-center space-y-4">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users size={36} className="text-muted/30" />
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Session Cards */}
-      <motion.section layout className="space-y-4">
-        <h3 className="text-sm font-medium text-muted flex items-center"><CalendarDays size={16} className="mr-2 text-muted"/> Sessioni Recenti</h3>
-        <AnimatePresence>
-          {history.length === 0 ? (
-            <motion.div layout className="bg-surface/30 border border-border border-dashed rounded-[32px] p-10 flex flex-col items-center justify-center text-center space-y-4">
-              <Trophy className="text-muted/50" size={48} />
-              <p className="text-muted">Nessun allenamento registrato.</p>
-            </motion.div>
-          ) : (
-            history.map(session => (
-              <motion.div layout key={session.id} className="bg-surface border border-border/50 rounded-3xl p-5 flex flex-col space-y-4 shadow-soft group hover:border-border transition-colors relative overflow-hidden">
-                <div className="flex justify-between items-start border-b border-border/50 pb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center border border-border shadow-inner">
-                      <CheckCircle2 className="text-green-500" size={24} />
+                <h3 className="text-xl font-black italic uppercase tracking-tighter">Unisciti alla Community</h3>
+                <p className="text-muted text-xs uppercase tracking-widest leading-relaxed px-8">Accedi al tuo profilo per vedere cosa stanno facendo i tuoi amici.</p>
+              </div>
+            ) : feedLoading ? (
+              <div className="py-20 text-center">
+                <div className="w-8 h-8 border-2 border-accentBlue border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-muted text-xs uppercase tracking-widest">Caricamento feed...</p>
+              </div>
+            ) : feed.length === 0 ? (
+              <div className="py-20 text-center space-y-4">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users size={36} className="text-muted/30" />
+                </div>
+                <h3 className="text-lg font-black italic uppercase tracking-tighter">Nessun aggiornamento</h3>
+                <p className="text-muted text-xs uppercase tracking-widest leading-relaxed px-8">Segui altri atleti dal tuo profilo per vedere i loro progressi qui.</p>
+              </div>
+            ) : (
+              feed.map((item, i) => (
+                <motion.div 
+                  key={item.id || i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="bg-surface/40 border border-white/5 rounded-[28px] p-4"
+                >
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-accentBlue/10 rounded-full flex items-center justify-center border border-accentBlue/20 text-accentBlue font-black text-sm">
+                      {(item.profiles?.username || '?')[0].toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="font-bold text-lg">{formatDate(session.date)}</h4>
-                      <span className="text-xs text-muted flex items-center mt-1"><Clock size={12} className="mr-1 opacity-70"/> {formatTime(session.duration)}</span>
+                      <span className="text-sm font-bold text-white">{item.profiles?.username || 'Atleta'}</span>
+                      <p className="text-[9px] font-bold text-muted uppercase">
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : ''}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right flex flex-col items-end">
-                    <span className="block text-2xl font-bold tracking-tighter text-accentBlue">{session.volume.toLocaleString()}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted font-bold">Kg Vol.</span>
+                  <div className="flex items-center space-x-2">
+                    <Flame size={14} className="text-accentOrange" />
+                    <span className="text-xs font-bold text-white/80">
+                      Ha condiviso la scheda <span className="text-accentOrange italic">"{item.plan_data?.name || 'Allenamento'}"</span>
+                    </span>
                   </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {session.exercises.map((ex, i) => {
-                    const completedSets = ex.sets.filter(s => s.completed).length;
-                    if (completedSets === 0) return null;
-                    return (
-                      <span key={i} className="text-xs bg-black border border-border px-3 py-1.5 rounded-full text-muted flex items-center">
-                        <span className="font-semibold text-white mr-1.5">{completedSets}x</span> {ex.exerciseName}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                <div className="pt-2">
-                  <button 
-                    onClick={() => shareResults(session)}
-                    className="w-full mt-2 bg-black/40 border border-border/50 text-white text-xs font-semibold rounded-2xl py-2.5 hover:bg-black transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Share size={14} className="text-accentOrange" />
-                    <span>Condividi Risultati</span>
-                  </button>
-                </div>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </motion.section>
+                </motion.div>
+              ))
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

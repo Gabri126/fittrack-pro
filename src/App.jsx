@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Plus, Play, History as HistoryIcon, Home, Activity, Dumbbell, Clock, Timer, Pause, RefreshCcw, CheckCircle2, ArrowLeft, ChevronRight } from 'lucide-react';
+import { Settings, Plus, Play, History as HistoryIcon, Home, Activity, Dumbbell, Clock, Timer, Pause, RefreshCcw, CheckCircle2, ArrowLeft, ChevronRight, User, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import SupabaseProvider, { useSupabase } from './contexts/SupabaseContext';
 import EditorView from './views/EditorView';
 import LiveView from './views/LiveView';
 import HistoryView from './views/HistoryView';
+import ProfileView from './views/ProfileView';
 
 export const cn = (...classes) => classes.filter(Boolean).join(' ');
 
-export default function App() {
-  const [currentTab, setCurrentTab] = useState('editor'); // 'editor', 'active', 'history'
+function AppInner() {
+  const ctx = useSupabase();
+  const [currentTab, setCurrentTab] = useState('editor'); // 'editor', 'active', 'history', 'profile'
   const [isTabBarHidden, setIsTabBarHidden] = useState(false);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [importModal, setImportModal] = useState(null); // { plan, creatorName }
 
   // Library state per ospitare più schede e i loro giorni
   const [library, setLibrary] = useState(() => {
@@ -64,6 +68,36 @@ export default function App() {
     return [];
   });
 
+  // Handle magic link import from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('p');
+    if (slug && ctx?.fetchSharedPlan) {
+      ctx.fetchSharedPlan(slug).then(({ data }) => {
+        if (data?.plan_data) {
+          setImportModal({
+            plan: data.plan_data,
+            creatorName: data.profiles?.username || 'Utente'
+          });
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      });
+    }
+  }, [ctx]);
+
+  const handleImportPlan = () => {
+    if (!importModal?.plan) return;
+    const imported = {
+      ...importModal.plan,
+      id: `imported-${Date.now()}`,
+      status: 'inactive',
+      name: `${importModal.plan.name} (importato)`
+    };
+    setLibrary(prev => [...prev, imported]);
+    setImportModal(null);
+    setCurrentTab('editor');
+  };
+
   // Global elapsed timer
   useEffect(() => {
     let interval;
@@ -90,6 +124,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('fittrack_ultra_history_v2', JSON.stringify(history));
   }, [history]);
+
+  // Background sync when online
+  useEffect(() => {
+    if (ctx?.isOnline && ctx?.session) {
+      ctx.syncLocalData(library, history);
+    }
+  }, [library, history, ctx?.isOnline, ctx?.session]);
 
   // Global Timer Logic
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -134,7 +175,7 @@ export default function App() {
 
   const renderActiveSessionBanner = () => {
     if (activeWorkout && currentTab !== 'active') {
-      if (!activeWorkout.exercises || !activeWorkout.exercises[currentExerciseIndex]) return null;
+      if (!activeWorkout?.exercises?.[currentExerciseIndex]) return null;
       const currentEx = activeWorkout.exercises[currentExerciseIndex];
       const activeSetIdx = currentEx?.sets.findIndex(s => !s.completed);
       const isTimerReady = isTimerRunning && timerLeft <= 0;
@@ -181,6 +222,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-accentBlue font-sans">
+      {/* Network Error Warning */}
+      <AnimatePresence>
+        {ctx?.supabaseHealth && !ctx.supabaseHealth.ok && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-red-600/90 backdrop-blur-md border-b border-red-500/50 overflow-hidden sticky top-0 z-[100]"
+          >
+            <div className="p-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={18} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-tighter text-white leading-tight">
+                  ERRORE DI RETE: Il browser non riesce a raggiungere i server di Supabase.
+                </p>
+                <p className="text-[9px] font-bold text-white/70">
+                  Controlla se il progetto è in pausa o cambia connessione Wi-Fi.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {currentTab === 'editor' && (
@@ -222,6 +288,32 @@ export default function App() {
             <HistoryView history={history} library={library} />
           </motion.div>
         )}
+        {currentTab === 'profile' && (
+          <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="h-full">
+            <ProfileView history={history} library={library} setCurrentTab={setCurrentTab} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Import Modal */}
+      <AnimatePresence>
+        {importModal && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md" onClick={() => setImportModal(null)} />
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="fixed bottom-0 left-0 right-0 z-[210] bg-[#1c1c1e] border-t border-white/10 rounded-t-[40px] px-8 pt-6 pb-12 shadow-2xl">
+              <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8" />
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-2">Importa Scheda</h3>
+                <p className="text-muted text-xs uppercase tracking-widest">di {importModal.creatorName}</p>
+              </div>
+              <p className="text-sm text-white/70 text-center mb-6">Piano: <span className="font-bold text-white">{importModal.plan?.name}</span></p>
+              <div className="flex space-x-3">
+                <button onClick={() => setImportModal(null)} className="flex-1 bg-white/5 text-white font-bold py-4 rounded-2xl border border-white/10 active:scale-95 transition-all">Annulla</button>
+                <button onClick={handleImportPlan} className="flex-1 bg-accentBlue text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all uppercase italic">Importa</button>
+              </div>
+            </motion.div>
+          </>
+        )}
       </AnimatePresence>
 
       {/* Global Recupero Timer UI */}
@@ -258,34 +350,67 @@ export default function App() {
         {!isTabBarHidden && (
           <motion.nav
             initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-            className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl border-t border-border/50 pb-safe pt-1 px-8 z-40 h-20"
+            className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl border-t border-border/50 pb-safe pt-2 px-6 z-40 h-18"
           >
             <div className="flex justify-between items-center max-w-sm mx-auto h-full">
-              <button onClick={() => setCurrentTab('editor')} className={cn("flex flex-col items-center p-2 transition-all active:scale-90", currentTab === 'editor' ? 'text-white' : 'text-muted')}>
-                <Home size={22} className="mb-1" />
-                <span className="text-[9px] font-black tracking-wider uppercase">Libreria</span>
-              </button>
-              
-              <button
-                onClick={() => setCurrentTab('active')}
+              <button 
+                onClick={() => setCurrentTab('editor')} 
                 className={cn(
-                  "w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg",
-                  currentTab === 'active' 
-                    ? "bg-accentBlue shadow-accentBlue/30 text-white" 
-                    : "bg-white/5 text-muted border border-white/5"
+                  "flex flex-col items-center justify-center p-2 transition-all active:scale-90", 
+                  currentTab === 'editor' ? 'text-white' : 'text-muted'
                 )}
               >
-                <Dumbbell size={24} />
+                <Home size={20} className="mb-0.5" />
+                <span className="text-[8px] font-black tracking-wider uppercase">Libreria</span>
+              </button>
+              
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => setCurrentTab('active')}
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg",
+                    currentTab === 'active' 
+                      ? "bg-accentBlue shadow-accentBlue/30 text-white" 
+                      : "bg-white/5 text-muted border border-white/5"
+                  )}
+                >
+                  <Dumbbell size={22} />
+                </button>
+              </div>
+
+              <button 
+                onClick={() => setCurrentTab('history')} 
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 transition-all active:scale-90", 
+                  currentTab === 'history' ? 'text-white' : 'text-muted'
+                )}
+              >
+                <HistoryIcon size={20} className="mb-0.5" />
+                <span className="text-[8px] font-black tracking-wider uppercase">Storico</span>
               </button>
 
-              <button onClick={() => setCurrentTab('history')} className={cn("flex flex-col items-center p-2 transition-all active:scale-90", currentTab === 'history' ? 'text-white' : 'text-muted')}>
-                <HistoryIcon size={22} className="mb-1" />
-                <span className="text-[9px] font-black tracking-wider uppercase">Storico</span>
+              <button 
+                onClick={() => setCurrentTab('profile')} 
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 transition-all active:scale-90", 
+                  currentTab === 'profile' ? 'text-white' : 'text-muted'
+                )}
+              >
+                <User size={20} className="mb-0.5" />
+                <span className="text-[8px] font-black tracking-wider uppercase">Profilo</span>
               </button>
             </div>
           </motion.nav>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <SupabaseProvider>
+      <AppInner />
+    </SupabaseProvider>
   );
 }
